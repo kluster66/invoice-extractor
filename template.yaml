@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Invoice Extractor - Extraction de factures PDF avec AWS Bedrock
+
+Globals:
+  Function:
+    Timeout: 300
+    MemorySize: 1024
+    Runtime: python3.8
+    Environment:
+      Variables:
+        AWS_REGION: !Ref AWS::Region
+        DYNAMODB_TABLE_NAME: !Ref InvoicesTable
+        LOG_LEVEL: INFO
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: Nom du bucket S3 pour les factures
+    Default: invoice-extractor-bucket
+  BedrockModelId:
+    Type: String
+    Description: ID du modèle Bedrock à utiliser
+    Default: anthropic.claude-3-sonnet-20240229-v1:0
+
+Resources:
+  # Bucket S3 pour les factures
+  InvoiceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt InvoiceExtractorFunction.Arn
+      LifecycleConfiguration:
+        Rules:
+          - Id: MoveToGlacier
+            Status: Enabled
+            Transitions:
+              - StorageClass: GLACIER
+                TransitionInDays: 90
+          - Id: ExpireOldObjects
+            Status: Enabled
+            ExpirationInDays: 365
+
+  # Table DynamoDB pour les factures extraites
+  InvoicesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: invoices
+      AttributeDefinitions:
+        - AttributeName: invoice_id
+          AttributeType: S
+        - AttributeName: numero_facture
+          AttributeType: S
+        - AttributeName: date_facture
+          AttributeType: S
+        - AttributeName: fournisseur
+          AttributeType: S
+      KeySchema:
+        - AttributeName: invoice_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: numero_facture-index
+          KeySchema:
+            - AttributeName: numero_facture
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+        - IndexName: date_facture-index
+          KeySchema:
+            - AttributeName: date_facture
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+        - IndexName: fournisseur-index
+          KeySchema:
+            - AttributeName: fournisseur
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  # Fonction Lambda principale
+  InvoiceExtractorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: invoice-extractor
+      CodeUri: src/
+      Handler: main.lambda_handler
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:PutObjectAcl
+              Resource: !Sub arn:aws:s3:::${InvoiceBucket}/*
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:ListFoundationModels
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:BatchWriteItem
+              Resource: !GetAtt InvoicesTable.Arn
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
+      Environment:
+        Variables:
+          S3_INPUT_BUCKET: !Ref InvoiceBucket
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_MAX_TOKENS: '1000'
+          BEDROCK_TEMPERATURE: '0.1'
+      Events:
+        S3Trigger:
+          Type: S3
+          Properties:
+            Bucket: !Ref InvoiceBucket
+            Events: s3:ObjectCreated:*
+
+  # Permission pour S3 d'appeler Lambda
+  BucketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref InvoiceExtractorFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub arn:aws:s3:::${InvoiceBucket}
+
+  # Dashboard CloudWatch pour le monitoring
+  InvoiceExtractorDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: invoice-extractor-dashboard
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${InvoiceExtractorFunction}"],
+                  [".", "Errors", ".", "."],
+                  [".", "Throttles", ".", "."]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Metrics",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Duration", "FunctionName", "${InvoiceExtractorFunction}"],
+                  [".", "ConcurrentExecutions", ".", "."]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "Lambda Performance",
+                "period": 300
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${InvoicesTable}"],
+                  [".", "ConsumedWriteCapacityUnits", ".", "."]
+                ],
+                "view": "timeSeries",
+                "stacked": false,
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Capacity",
+                "period": 300
+              }
+            },
+            {
+              "type": "log",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '${InvoiceExtractorFunction}' | fields @timestamp, @message\n| filter @message like /ERROR/ or @message like /WARN/\n| sort @timestamp desc\n| limit 20",
+                "region": "${AWS::Region}",
+                "title": "Recent Errors & Warnings",
+                "view": "table"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  InvoiceBucketName:
+    Description: Nom du bucket S3 pour déposer les factures
+    Value: !Ref InvoiceBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-InvoiceBucket
+  InvoiceExtractorFunctionArn:
+    Description: ARN de la fonction Lambda
+    Value: !GetAtt InvoiceExtractorFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-InvoiceExtractorFunction
+  InvoicesTableName:
+    Description: Nom de la table DynamoDB
+    Value: !Ref InvoicesTable
+    Export:
+      Name: !Sub ${AWS::StackName}-InvoicesTable
+  DashboardUrl:
+    Description: URL du dashboard CloudWatch
+    Value: !Sub https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=invoice-extractor-dashboard

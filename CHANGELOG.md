@@ -1,0 +1,98 @@
+# Changelog
+
+Tous les changements notables de ce projet seront documentés dans ce fichier.
+
+Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
+et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.0.0] - 2026-01-11
+
+### Ajouté
+- **Support multi-modèles Bedrock** : Claude 3, Llama 3, Amazon Titan, etc.
+- **Configuration AWS intelligente** : Détection automatique région/credentials depuis AWS CLI
+- **Parsing robuste** : Extraction JSON même avec texte supplémentaire
+- **Normalisation des champs** : Support français/anglais automatique
+- **Scripts de test améliorés** : `test_models_simple.py`, `list_available_models.py`
+- **Documentation mise à jour** : README, CONFIGURATION.md, DEPLOY.md
+- **Configuration interactive** : `configure_model.py` pour choisir facilement le modèle
+
+### Modifié
+- **Client Bedrock refactorisé** : Support des formats d'API différents par modèle
+- **Configuration refaite** : Priorité AWS CLI → Variables d'environnement → Valeurs par défaut
+- **Prompt d'extraction optimisé** : Meilleure précision pour différents modèles
+- **Structure des données** : Normalisation automatique des noms de champs
+
+### Supprimé
+- **Configuration hardcodée** : Plus de région/credentials en dur
+- **Dépendances obsolètes** : Mise à jour des versions
+
+### Notes de migration
+- **Ancienne configuration** : Variables d'environnement requises
+- **Nouvelle configuration** : AWS CLI suffit, .env optionnel
+- **Modèle par défaut** : Llama 3.1 70B au lieu de Claude 3 Sonnet (pas d'activation requise)
+
+## [1.0.0] - 2026-01-10
+
+### Ajouté
+- **Fonctionnalité de base** : Extraction PDF avec PyPDF2 + pdfplumber
+- **Intégration AWS Bedrock** : Claude 3 Sonnet pour l'extraction
+- **Stockage DynamoDB** : Table avec indexes optimisés
+- **Déclenchement S3** : Architecture serverless complète
+- **Déploiement multi-méthodes** : SAM, CDK, manuel
+- **Tests unitaires** : Couverture des composants principaux
+- **Documentation complète** : README, guides de déploiement
+
+### Fonctionnalités
+- Extraction des champs de facture : fournisseur, montant, numéro, date, etc.
+- Validation des données extraites
+- Gestion des erreurs et retry
+- Logging CloudWatch
+- Monitoring de base
+
+## Notes de version
+
+### Version 2.0.0
+- **Breaking change** : Configuration AWS intelligente (plus de hardcoding)
+- **Amélioration majeure** : Support de 129 modèles Bedrock
+- **Compatibilité** : Python 3.8+, AWS us-west-2 recommandée
+
+### Version 1.0.0
+- **Version initiale** : Fonctionnalités de base opérationnelles
+- **Production ready** : Architecture AWS complète
+- **Documentation** : Guides complets d'installation et déploiement
+
+## Prochaines versions
+
+### [2.1.0] - Planifié
+- Support des images dans les PDF
+- Extraction multi-pages améliorée
+- Cache des résultats pour réduire les coûts
+- Dashboard de monitoring
+
+### [3.0.0] - À venir
+- Support multi-langues (anglais, espagnol, allemand)
+- Extraction de tableaux complexes
+- Intégration avec d'autres LLM providers
+- Plugin system pour extensions
+
+---
+
+## Convention de version
+
+- **MAJOR** : Changements incompatibles avec l'API
+- **MINOR** : Nouvelles fonctionnalités rétrocompatibles  
+- **PATCH** : Corrections de bugs rétrocompatibles
+
+## Politique de support
+
+- **Version actuelle** : 2.0.0 (support complet)
+- **Version précédente** : 1.0.0 (support sécurité seulement)
+- **Versions plus anciennes** : Non supportées
+
+## Liens
+
+- [Documentation](README.md)
+- [Guide de configuration](CONFIGURATION.md)
+- [Guide de déploiement](DEPLOY.md)
+- [Issues GitHub](https://github.com/votre-repo/issues)
+- [Releases](https://github.com/votre-repo/releases)

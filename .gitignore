@@ -1,0 +1,285 @@
+# .gitignore pour le projet Invoice Extractor avec AWS Bedrock
+
+# ============================================
+# FICHIERS SENSIBLES / SECRETS
+# ============================================
+
+# Fichiers d'environnement avec secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.test
+
+# Fichiers de configuration AWS
+~/.aws/credentials
+~/.aws/config
+aws_config.json
+aws_credentials.json
+
+# Clés privées SSH
+*.pem
+*.key
+id_rsa
+id_dsa
+*.p12
+*.pfx
+
+# ============================================
+# PYTHON - ARTEFACTS DE COMPILATION ET VENV
+# ============================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# ============================================
+# ENVIRONNEMENTS VIRTUELS PYTHON
+# ============================================
+
+# Environnements virtuels
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+pythonenv/
+
+# Environnement conda
+.conda/
+
+# ============================================
+# AWS / SERVERLESS ARTEFACTS
+# ============================================
+
+# AWS SAM
+.sam/
+.aws-sam/
+samconfig.toml
+
+# AWS CDK
+cdk.out/
+cdk.context.json
+
+# CloudFormation
+*.template.yaml.bak
+*.template.json.bak
+
+# Lambda deployment packages
+*.zip
+deployments/
+package/
+
+# AWS Toolkit for VS Code
+.aws-toolkit/
+
+# ============================================
+# IDE / ÉDITEURS DE CODE
+# ============================================
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Vim
+*.swp
+*.swo
+*~
+
+# ============================================
+# SYSTÈME D'EXPLOITATION
+# ============================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ============================================
+# FICHIERS DE TEST / DONNÉES LOCALES
+# ============================================
+
+# Factures de test (contiennent des données sensibles)
+test_factures/
+test_invoices/
+sample_pdfs/
+
+# Fichiers de test générés
+test_output/
+test_results/
+*.test.json
+*.test_output.txt
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Fichiers temporaires
+tmp/
+temp/
+*.tmp
+*.temp
+
+# ============================================
+# AUTRES
+# ============================================
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Sphinx documentation
+docs/_build/
+
+# MkDocs documentation
+site/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Profiling data
+.prof
+
+# ============================================
+# FICHIERS SPÉCIFIQUES AU PROJET
+# ============================================
+
+# Ancien répertoire src avec toutes les dépendances (NE PAS versionner)
+src/
+
+# Fichiers de configuration locale
+config/local_config.py
+config/local_settings.py
+
+# Fichiers de déploiement local
+deploy_local.sh
+deploy_local.ps1
+
+# Fichiers de backup
+*.bak
+*.backup
+
+# ============================================
+# EXCEPTIONS (fichiers à inclure)
+# ============================================
+
+# Inclure les templates de configuration
+!config/env.example
+!config/config.example.py
+
+# Inclure les scripts de déploiement
+!deploy.sh
+!deploy.ps1
+
+# Inclure les templates d'infrastructure
+!template.yaml
+!infrastructure/cdk-stack.py
+!cloudformation-template.yaml
+
+# Code source propre (à versionner)
+!src_propre/
+
+# ============================================
+# NOTES IMPORTANTES
+# ============================================
+
+# AVANT DE PUSHER SUR GITHUB, VÉRIFIER QUE :
+# 1. Aucun fichier .env n'est présent
+# 2. Aucune clé AWS n'est exposée
+# 3. Aucune facture réelle n'est dans le dépôt
+# 4. Les fichiers de build (.sam/, .aws-sam/) sont exclus
+# 5. Les environnements virtuels sont exclus
+
+# Pour vérifier ce qui sera ignoré :
+# git status --ignored
+
+# Pour forcer l'ajout d'un fichier ignoré :
+# git add -f nom_du_fichier
