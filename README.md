@@ -38,7 +38,7 @@ graph TB
 ## 🚀 Installation rapide
 
 ### Prérequis
-- Python 3.8+
+- Python 3.8+ (⚠️ SAM nécessite Python ≤3.13)
 - AWS CLI configuré (`aws configure`)
 - Compte AWS avec accès à Bedrock, S3, DynamoDB, Lambda
 
@@ -50,10 +50,10 @@ cd invoice-extractor
 pip install -r requirements.txt
 
 # 2. Configurer (optionnel - utilise AWS CLI par défaut)
-cp .env.example .env  # Éditer si nécessaire
+cp config/env.example .env  # Éditer si nécessaire
 
 # 3. Tester
-python -m src.main test_factures/votre_facture.pdf
+python -m src_propre.main test_factures/votre_facture.pdf
 ```
 
 ## ⚙️ Configuration intelligente
@@ -87,11 +87,11 @@ S3_INPUT_BUCKET=votre-bucket-factures
 ### Test local
 ```bash
 # Extraction simple
-python -m src.main chemin/vers/facture.pdf
+python -m src_propre.main chemin/vers/facture.pdf
 
 # Test avec modèle spécifique
 python -c "from config.config import Config; Config.set_model('llama-3-1-70b')"
-python -m src.main facture.pdf
+python -m src_propre.main facture.pdf
 
 # Tester différents modèles
 python test_models_simple.py
@@ -141,25 +141,46 @@ Les champs sont normalisés automatiquement :
 
 ## 🚀 Déploiement AWS
 
-### Option 1: AWS SAM (recommandé)
-```bash
-# Installer SAM CLI
-pip install aws-sam-cli
+### ⚠️ Important : Problème SAM avec Python 3.14
+AWS SAM CLI a une incompatibilité avec Python 3.14 (Pydantic v1). Solutions :
 
-# Déployer
+**Solution A : Utiliser CloudFormation direct (recommandé)**
+```bash
+# Script de déploiement simplifié
+python deploy_with_cloudformation.py
+```
+
+**Solution B : Utiliser Python 3.12 pour SAM**
+```bash
+# Installer Python 3.12, puis :
+python3.12 -m venv venv
+venv\Scripts\activate  # Windows
+pip install aws-sam-cli
 sam build
 sam deploy --guided
 ```
 
-### Option 2: AWS CDK
+**Solution C : Utiliser Docker avec SAM**
 ```bash
-cd infrastructure
-cdk bootstrap
-cdk deploy
+sam build --use-container
+sam deploy --guided
 ```
 
-### Option 3: Manuellement
-Voir `DEPLOY.md` pour les instructions détaillées.
+### Options de déploiement disponibles :
+
+1. **✅ CloudFormation direct** (sans SAM/CDK) - `deploy_with_cloudformation.py`
+2. **AWS SAM** - `template.yaml` (nécessite Python ≤3.13)
+3. **AWS CDK** - `infrastructure/cdk-stack.py` (nécessite Node.js)
+4. **Déploiement manuel** - Voir `DEPLOY.md`
+
+### Déploiement rapide avec CloudFormation
+```bash
+# 1. Vérifier la configuration AWS
+python deploy_with_cloudformation.py
+
+# 2. Choisir l'option 1 (Valider le template)
+# 3. Choisir l'option 2 (Créer la stack)
+```
 
 ## 📊 Coûts estimés
 
@@ -194,17 +215,24 @@ python list_available_models.py
 ### Structure du projet
 ```
 invoice-extractor/
-├── src/                    # Code source
-│   ├── main.py            # Handler Lambda
-│   ├── pdf_extractor.py   # Extraction PDF (dual library)
-│   ├── bedrock_client.py  # Client multi-modèles
-│   └── dynamodb_client.py # Client DynamoDB avec indexes
-├── config/
-│   └── config.py          # Configuration intelligente
-├── infrastructure/        # Infrastructure as Code
-├── tests/                # Tests
-├── scripts/              # Scripts utilitaires
-└── docs/                 # Documentation
+├── src_propre/              # Code source propre (à versionner)
+│   ├── main.py             # Handler Lambda
+│   ├── bedrock_client.py   # Client multi-modèles Bedrock
+│   ├── dynamodb_client.py  # Client DynamoDB avec indexes
+│   ├── pdf_extractor.py    # Extraction PDF (dual library)
+│   └── config.py           # Configuration intelligente
+├── config/                 # Configuration
+│   ├── config.py          # (copié dans src_propre/)
+│   └── env.example        # Template variables d'environnement
+├── infrastructure/         # Infrastructure as Code
+│   └── cdk-stack.py       # Stack AWS CDK
+├── tests/                 # Tests
+├── scripts/               # Scripts utilitaires
+├── .gitignore            # Fichiers à ignorer pour GitHub
+├── cloudformation-template.yaml  # Template CloudFormation
+├── template.yaml         # Template AWS SAM
+├── deploy_with_cloudformation.py # Script de déploiement
+└── requirements.txt      # Dépendances Python
 ```
 
 ### Ajouter un nouveau modèle
@@ -212,7 +240,7 @@ invoice-extractor/
 2. Le client détectera automatiquement le format requis
 
 ### Personnaliser l'extraction
-1. Modifier le prompt dans `src/bedrock_client.py`
+1. Modifier le prompt dans `src_propre/bedrock_client.py`
 2. Ajouter des mappings dans `_normalize_field_names()`
 3. Mettre à jour la validation
 
@@ -236,6 +264,13 @@ invoice-extractor/
 3. **"JSON parsing error"**
    - Le modèle fonctionne mais le format de réponse varie
    - Le parsing amélioré gère la plupart des cas
+
+4. **"sam build échoue avec Python 3.14"**
+   ```bash
+   # Utiliser CloudFormation direct
+   python deploy_with_cloudformation.py
+   # Ou installer Python 3.12
+   ```
 
 ### Logs et monitoring
 - **CloudWatch Logs** : `/aws/lambda/invoice-extractor`
@@ -262,4 +297,6 @@ Pour les problèmes :
 **Dernière mise à jour** : Janvier 2026  
 **Version** : 2.0.0  
 **Statut** : Production Ready ✅  
-**Modèle par défaut** : Llama 3.1 70B (fonctionne sans activation)
+**Modèle par défaut** : Llama 3.1 70B (fonctionne sans activation)  
+**Compatibilité Python** : 3.8+ (⚠️ SAM nécessite ≤3.13)  
+**Options de déploiement** : CloudFormation, SAM, CDK, Manuel

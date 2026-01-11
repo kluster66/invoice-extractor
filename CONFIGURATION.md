@@ -9,7 +9,8 @@ Ce guide explique comment configurer l'extracteur de factures pour votre environ
 3. [Configuration DynamoDB](#-configuration-dynamodb)
 4. [Configuration S3](#-configuration-s3)
 5. [Configuration Application](#-configuration-application)
-6. [Dépannage](#-dépannage)
+6. [Structure du projet](#-structure-du-projet)
+7. [Dépannage](#-dépannage)
 
 ## 🔧 Configuration AWS
 
@@ -179,6 +180,44 @@ BEDROCK_TEMPERATURE=0.1  # Plus précis
 MAX_RETRY_ATTEMPTS=5
 ```
 
+## 📁 Structure du projet
+
+### Organisation des fichiers
+```
+invoice-extractor/
+├── src_propre/              # Code source propre (à versionner)
+│   ├── main.py             # Handler Lambda principal
+│   ├── bedrock_client.py   # Client multi-modèles AWS Bedrock
+│   ├── dynamodb_client.py  # Client DynamoDB avec indexes
+│   ├── pdf_extractor.py    # Extraction PDF (PyPDF2 + pdfplumber)
+│   └── config.py           # Configuration intelligente AWS
+├── config/                 # Configuration
+│   ├── config.py          # (copié dans src_propre/)
+│   └── env.example        # Template variables d'environnement
+├── infrastructure/         # Infrastructure as Code
+│   └── cdk-stack.py       # Stack AWS CDK
+├── tests/                 # Tests unitaires et d'intégration
+├── .gitignore            # Fichiers à ignorer pour GitHub
+├── cloudformation-template.yaml  # Template CloudFormation
+├── template.yaml         # Template AWS SAM
+├── deploy_with_cloudformation.py # Script de déploiement
+├── requirements.txt      # Dépendances Python
+└── requirements-lambda.txt # Dépendances pour Lambda
+```
+
+### Fichiers importants
+- **`.gitignore`** : Exclut les secrets, dépendances, artefacts de build
+- **`src_propre/`** : Code source propre (pas de dépendances)
+- **`config/env.example`** : Template pour variables d'environnement
+- **`deploy_with_cloudformation.py`** : Script de déploiement simplifié
+
+### Configuration pour GitHub
+Avant de pousser sur GitHub :
+1. Vérifier qu'aucun fichier `.env` n'est présent
+2. Confirmer que le dossier `src/` (avec dépendances) est ignoré
+3. S'assurer que `src_propre/` contient uniquement le code source
+4. Vérifier qu'aucune facture réelle n'est dans `test_factures/`
+
 ## 🔍 Dépannage
 
 ### Problème : "Model access not granted"
@@ -233,6 +272,19 @@ aws s3 mb s3://votre-bucket-factures --region us-west-2
 aws s3 ls s3://votre-bucket-factures
 ```
 
+### Problème : "sam build échoue avec Python 3.14"
+**Solution** :
+```bash
+# Utiliser CloudFormation direct
+python deploy_with_cloudformation.py
+
+# Ou utiliser Python 3.12
+python3.12 -m venv venv
+venv\Scripts\activate
+pip install aws-sam-cli
+sam build
+```
+
 ## 📊 Monitoring
 
 ### CloudWatch Logs
@@ -279,7 +331,7 @@ BEDROCK_MAX_TOKENS=500
 ```
 
 ### Modifier la structure DynamoDB
-Modifier `src/dynamodb_client.py` :
+Modifier `src_propre/dynamodb_client.py` :
 - Ajouter/supprimer des indexes
 - Changer les capacités
 - Ajouter de nouveaux champs
@@ -319,5 +371,8 @@ Pour des questions spécifiques :
 ---
 
 **Dernière mise à jour** : Janvier 2026  
-**Version du guide** : 2.0.0  
-**Compatibilité** : AWS us-west-2, Python 3.8+
+**Version du guide** : 2.0.1  
+**Compatibilité** : AWS us-west-2, Python 3.8+  
+**Structure** : Code source propre dans `src_propre/`  
+**GitHub Ready** : ✅ Avec `.gitignore` complet  
+**Options de déploiement** : CloudFormation, SAM, CDK, Manuel

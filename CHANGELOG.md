@@ -5,6 +5,33 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-01-11
+
+### Ajouté
+- **Fichier `.gitignore` complet** : Pour pousser sur GitHub en sécurité
+- **Script de déploiement CloudFormation** : `deploy_with_cloudformation.py`
+- **Support CloudFormation direct** : Alternative à SAM avec Python 3.14
+- **Structure de projet propre** : Code source dans `src_propre/`, dépendances exclues
+- **Documentation mise à jour** : Problème SAM avec Python 3.14 documenté
+- **Script CDK simplifié** : `deploy_with_cdk_simple.py`
+
+### Modifié
+- **Organisation du code source** : Séparation code/dépendances pour GitHub
+- **Mise à jour README.md** : Instructions CloudFormation ajoutées
+- **Mise à jour DEPLOY.md** : Guide CloudFormation détaillé
+- **Mise à jour CONFIGURATION.md** : Structure du projet documentée
+- **Version des guides** : 2.0.1 pour toutes les documentations
+
+### Corrections
+- **Problème SAM Python 3.14** : Documentation des solutions de contournement
+- **Structure pour GitHub** : `.gitignore` complet pour éviter les secrets
+- **Encodage des scripts** : Versions sans émojis pour Windows
+
+### Notes
+- **GitHub Ready** : Projet prêt à être poussé sur GitHub
+- **Compatibilité Python 3.14** : Solution CloudFormation disponible
+- **Options de déploiement** : CloudFormation, SAM, CDK, Manuel
+
 ## [2.0.0] - 2026-01-11
 
 ### Ajouté
@@ -51,6 +78,11 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## Notes de version
 
+### Version 2.0.1
+- **GitHub Ready** : Structure propre avec `.gitignore` complet
+- **Solution SAM Python 3.14** : CloudFormation direct comme alternative
+- **Documentation complète** : Tous les guides mis à jour
+
 ### Version 2.0.0
 - **Breaking change** : Configuration AWS intelligente (plus de hardcoding)
 - **Amélioration majeure** : Support de 129 modèles Bedrock
@@ -85,8 +117,8 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## Politique de support
 
-- **Version actuelle** : 2.0.0 (support complet)
-- **Version précédente** : 1.0.0 (support sécurité seulement)
+- **Version actuelle** : 2.0.1 (support complet)
+- **Version précédente** : 2.0.0 (support sécurité seulement)
 - **Versions plus anciennes** : Non supportées
 
 ## Liens
