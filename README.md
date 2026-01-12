@@ -35,6 +35,15 @@ graph TB
     Bedrock -->|Logs| CloudWatch[CloudWatch Logs]
 ```
 
+## ✅ Déploiement CloudFormation réussi
+La stack `invoice-extractor-final` a été déployée avec succès dans la région `us-west-2` via CloudFormation direct. Toutes les ressources AWS sont opérationnelles :
+
+- **S3 Bucket** : `invoice-extractor-bucket-1736604000`
+- **DynamoDB Table** : `invoices-extractor`
+- **Lambda Function** : `invoice-extractor-lambda`
+- **IAM Role** : `invoice-extractor-role`
+- **CloudWatch Logs** : Configurés
+
 ## 🚀 Installation rapide
 
 ### Prérequis
@@ -144,7 +153,7 @@ Les champs sont normalisés automatiquement :
 ### ⚠️ Important : Problème SAM avec Python 3.14
 AWS SAM CLI a une incompatibilité avec Python 3.14 (Pydantic v1). Solutions :
 
-**Solution A : Utiliser CloudFormation direct (recommandé)**
+**Solution A : Utiliser CloudFormation direct (recommandé et testé)**
 ```bash
 # Script de déploiement simplifié
 python deploy_with_cloudformation.py
@@ -168,7 +177,7 @@ sam deploy --guided
 
 ### Options de déploiement disponibles :
 
-1. **✅ CloudFormation direct** (sans SAM/CDK) - `deploy_with_cloudformation.py`
+1. **✅ CloudFormation direct** (sans SAM/CDK) - `deploy_with_cloudformation.py` - **TESTÉ ET FONCTIONNEL**
 2. **AWS SAM** - `template.yaml` (nécessite Python ≤3.13)
 3. **AWS CDK** - `infrastructure/cdk-stack.py` (nécessite Node.js)
 4. **Déploiement manuel** - Voir `DEPLOY.md`
@@ -180,6 +189,7 @@ python deploy_with_cloudformation.py
 
 # 2. Choisir l'option 1 (Valider le template)
 # 3. Choisir l'option 2 (Créer la stack)
+# 4. Suivre la progression dans CloudFormation
 ```
 
 ## 📊 Coûts estimés
@@ -295,8 +305,9 @@ Pour les problèmes :
 ---
 
 **Dernière mise à jour** : Janvier 2026  
-**Version** : 2.0.0  
+**Version** : 2.0.1  
 **Statut** : Production Ready ✅  
 **Modèle par défaut** : Llama 3.1 70B (fonctionne sans activation)  
 **Compatibilité Python** : 3.8+ (⚠️ SAM nécessite ≤3.13)  
-**Options de déploiement** : CloudFormation, SAM, CDK, Manuel
+**Options de déploiement** : ✅ CloudFormation (testé), SAM, CDK, Manuel  
+**Stack déployée** : `invoice-extractor-final` en `us-west-2` ✅

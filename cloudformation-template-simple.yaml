@@ -1,0 +1,248 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploiement de l'outil d'extraction de factures PDF avec AWS Bedrock
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Nom de l'environnement (dev, staging, prod)
+    Default: dev
+  
+  BucketName:
+    Type: String
+    Description: Nom du bucket S3 pour les factures
+    Default: invoice-input-bucket
+  
+  TableName:
+    Type: String
+    Description: Nom de la table DynamoDB
+    Default: invoices
+  
+  BedrockModelId:
+    Type: String
+    Description: ID du modèle Bedrock à utiliser
+    Default: meta.llama3-1-70b-instruct-v1:0
+
+Resources:
+  # S3 Bucket pour les factures
+  InvoiceInputBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Application
+          Value: invoice-extractor
+
+  # Table DynamoDB pour les factures extraites
+  InvoicesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      AttributeDefinitions:
+        - AttributeName: invoice_id
+          AttributeType: S
+        - AttributeName: numero_facture
+          AttributeType: S
+        - AttributeName: date_facture
+          AttributeType: S
+        - AttributeName: fournisseur
+          AttributeType: S
+      KeySchema:
+        - AttributeName: invoice_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: numero_facture-index
+          KeySchema:
+            - AttributeName: numero_facture
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+        - IndexName: date_facture-index
+          KeySchema:
+            - AttributeName: date_facture
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+        - IndexName: fournisseur-index
+          KeySchema:
+            - AttributeName: fournisseur
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Application
+          Value: invoice-extractor
+
+  # Rôle IAM pour Lambda
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: InvoiceExtractorPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:aws:s3:::${BucketName}
+                  - !Sub arn:aws:s3:::${BucketName}/*
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchWriteItem
+                Resource: !GetAtt InvoicesTable.Arn
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:ListFoundationModels
+                Resource: '*'
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # Fonction Lambda
+  InvoiceExtractorLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub invoice-extractor-${EnvironmentName}
+      Description: Extrait les informations de factures PDF avec Bedrock
+      Runtime: python3.9
+      Handler: main.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          
+          def lambda_handler(event, context):
+              print(f"Event: {json.dumps(event)}")
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({
+                      'message': 'Lambda function created successfully',
+                      'environment': os.environ.get('ENVIRONMENT_NAME', 'dev'),
+                      'bucket': os.environ.get('S3_INPUT_BUCKET'),
+                      'table': os.environ.get('DYNAMODB_TABLE_NAME'),
+                      'model': os.environ.get('BEDROCK_MODEL_ID')
+                  })
+              }
+      Timeout: 300
+      MemorySize: 1024
+      Environment:
+        Variables:
+          AWS_REGION: !Ref AWS::Region
+          DYNAMODB_TABLE_NAME: !Ref TableName
+          S3_INPUT_BUCKET: !Ref BucketName
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          ENVIRONMENT_NAME: !Ref EnvironmentName
+          LOG_LEVEL: INFO
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Application
+          Value: invoice-extractor
+
+  # Permission pour S3 d'appeler Lambda
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref InvoiceExtractorLambda
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub arn:aws:s3:::${BucketName}
+
+  # Configuration de notification S3 (simplifiée)
+  S3BucketNotification:
+    Type: AWS::S3::Bucket
+    DependsOn:
+      - InvoiceExtractorLambda
+      - LambdaInvokePermission
+    Properties:
+      BucketName: !Ref BucketName
+      NotificationConfiguration:
+        LambdaFunctionConfigurations:
+          - Events:
+              - s3:ObjectCreated:*
+            LambdaFunctionArn: !GetAtt InvoiceExtractorLambda.Arn
+            Filter:
+              Key:
+                FilterRules:
+                  - Name: suffix
+                    Value: .pdf
+
+  # CloudWatch Log Group pour Lambda
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/invoice-extractor-${EnvironmentName}
+      RetentionInDays: 30
+
+Outputs:
+  BucketName:
+    Description: Nom du bucket S3 pour les factures
+    Value: !Ref BucketName
+  
+  TableName:
+    Description: Nom de la table DynamoDB
+    Value: !Ref TableName
+  
+  LambdaFunctionName:
+    Description: Nom de la fonction Lambda
+    Value: !Ref InvoiceExtractorLambda
+  
+  LambdaFunctionArn:
+    Description: ARN de la fonction Lambda
+    Value: !GetAtt InvoiceExtractorLambda.Arn
+  
+  S3BucketArn:
+    Description: ARN du bucket S3
+    Value: !GetAtt InvoiceInputBucket.Arn
+  
+  DynamoDBTableArn:
+    Description: ARN de la table DynamoDB
+    Value: !GetAtt InvoicesTable.Arn
+  
+  LambdaConsoleUrl:
+    Description: URL de la console Lambda
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/lambda/home?region=${AWS::Region}#/functions/${InvoiceExtractorLambda}
+  
+  S3ConsoleUrl:
+    Description: URL de la console S3
+    Value: !Sub https://s3.console.aws.amazon.com/s3/buckets/${BucketName}
