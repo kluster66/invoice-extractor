@@ -24,7 +24,7 @@ class DynamoDBClient:
             region: Région AWS (si None, utilise la configuration)
             table_name: Nom de la table DynamoDB (si None, utilise la configuration)
         """
-        from .config import Config
+        from config import Config
         
         self.region = region or Config.AWS_REGION
         self.table_name = table_name or Config.DYNAMODB_TABLE_NAME

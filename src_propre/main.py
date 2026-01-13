@@ -1,27 +1,34 @@
 #!/usr/bin/env python3
 """
 Outil d'extraction d'informations de factures PDF avec AWS Bedrock
+Version simplifiée utilisant seulement PyPDF2
 """
 
 import os
 import json
 import logging
 import boto3
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 from pathlib import Path
-
-from .pdf_extractor import PDFExtractor
-from .bedrock_client import BedrockClient
-from .dynamodb_client import DynamoDBClient
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Import des modules locaux
+try:
+    from pdf_extractor_simple_only import PDFExtractorSimple
+    from bedrock_client import BedrockClient
+    from dynamodb_client import DynamoDBClient
+    from config import Config
+except ImportError as e:
+    logger.error(f"Erreur d'import: {e}")
+    raise
 
-class InvoiceExtractor:
-    """Classe principale pour l'extraction de factures"""
+
+class InvoiceExtractorSimple:
+    """Classe principale pour l'extraction de factures (version simplifiée)"""
     
     def __init__(self, region: str = None):
         """
@@ -30,10 +37,8 @@ class InvoiceExtractor:
         Args:
             region: Région AWS à utiliser (si None, utilise la configuration)
         """
-        from .config import Config
-        
         self.region = region or Config.AWS_REGION
-        self.pdf_extractor = PDFExtractor()
+        self.pdf_extractor = PDFExtractorSimple()
         self.bedrock_client = BedrockClient(region=self.region)
         self.dynamodb_client = DynamoDBClient(region=self.region)
         
@@ -85,9 +90,15 @@ class InvoiceExtractor:
         Returns:
             Prompt formaté
         """
+        # Limiter la taille du texte pour éviter de dépasser les limites de tokens
+        max_text_length = 10000
+        if len(pdf_text) > max_text_length:
+            logger.warning(f"Texte PDF trop long ({len(pdf_text)} caractères), troncation à {max_text_length}")
+            pdf_text = pdf_text[:max_text_length] + "... [texte tronqué]"
+        
         prompt_template = """Analyse ce document PDF.
 
-Tu es un expert comptable. en te basant sur ces données : {pdf_text}
+Tu es un expert comptable. En te basant sur ces données : {pdf_text}
 
 Extrais les informations suivantes et formate-les en JSON strict (sans markdown, juste le code brut).
 
@@ -147,7 +158,7 @@ Si une info est manquante, mets null."""
                     "message": "Facture traitée avec succès",
                     "invoice_id": item_id,
                     "data": extracted_data
-                })
+                }, ensure_ascii=False)
             }
             
         except Exception as e:
@@ -157,7 +168,7 @@ Si une info est manquante, mets null."""
                 "body": json.dumps({
                     "error": str(e),
                     "message": "Erreur lors du traitement de la facture"
-                })
+                }, ensure_ascii=False)
             }
 
 
@@ -173,11 +184,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         Réponse Lambda
     """
     # Récupérer la région depuis les variables d'environnement
-    # En Lambda, AWS_REGION est automatiquement définie
     region = os.getenv("AWS_REGION")
     
     # Initialiser et exécuter l'extracteur
-    extractor = InvoiceExtractor(region=region)
+    extractor = InvoiceExtractorSimple(region=region)
     return extractor.process_s3_event(event)
 
 
@@ -186,13 +196,13 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) != 2:
-        print("Usage: python main.py <chemin_vers_pdf>")
+        print("Usage: python main_simple.py <chemin_vers_pdf>")
         sys.exit(1)
     
     pdf_path = sys.argv[1]
     filename = Path(pdf_path).name
     
-    extractor = InvoiceExtractor()
+    extractor = InvoiceExtractorSimple()
     
     try:
         result = extractor.extract_from_pdf(pdf_path, filename)

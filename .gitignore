@@ -238,9 +238,22 @@ deployment-flat.zip
 deployment-updated.zip
 deployment-corrected.zip
 
+# Packages de dépendances Lambda (NE PAS versionner)
+lambda_package_minimal/
+
 # Fichiers de réponse/test
 response.json
 *.response.json
+test_event.json
+test_payload.json
+policy.json
+policy_updated.json
+s3-notification-config.json
+
+# Fichiers de test temporaires
+test_deploy.py
+test_deploy_no_emoji.py
+test_lambda.py
 
 # Scripts de mise à jour temporaires
 update_lambda_code.py
@@ -305,3 +318,36 @@ deploy_local.ps1
 
 # Pour forcer l'ajout d'un fichier ignoré :
 # git add -f nom_du_fichier
+
+# ============================================
+# FICHIERS TEMPORAIRES SPÉCIFIQUES
+# ============================================
+
+# Scripts de déploiement temporaires
+deploy_auto.py
+deploy_final.py
+deploy_final_no_emoji.py
+deploy_simple_step_by_step.py
+deploy_with_cloudformation.py
+deploy_with_cloudformation_simple.py
+
+# Scripts de cleanup temporaires
+cleaning_aws.ps1
+cleanup-aws-fixed.ps1
+cleanup-aws-simple.ps1
+cleanup-aws.ps1
+cleanup-aws.sh
+
+# Scripts utilitaires temporaires
+fix_imports.py
+
+# Fichiers hex temporaires
+gitignore.hex
+
+# Versions alternatives du code (non utilisées en production)
+src_propre/main_fixed.py
+src_propre/main_simple.py
+src_propre/pdf_extractor_simple_only.py
+
+# Templates CloudFormation alternatifs
+cloudformation-template-python310.yaml
