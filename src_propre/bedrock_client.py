@@ -23,7 +23,7 @@ class BedrockClient:
             region: Région AWS (si None, utilise la configuration)
             model_id: ID du modèle Bedrock (si None, utilise la configuration)
         """
-        from config.config import Config
+        from .config import Config
         
         self.region = region or Config.AWS_REGION
         self.model_id = model_id or Config.BEDROCK_MODEL_ID

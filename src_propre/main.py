@@ -30,7 +30,7 @@ class InvoiceExtractor:
         Args:
             region: Région AWS à utiliser (si None, utilise la configuration)
         """
-        from config.config import Config
+        from .config import Config
         
         self.region = region or Config.AWS_REGION
         self.pdf_extractor = PDFExtractor()
