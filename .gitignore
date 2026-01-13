@@ -122,6 +122,7 @@ cdk.context.json
 *.zip
 deployments/
 package/
+lambda_package/
 
 # AWS Toolkit for VS Code
 .aws-toolkit/
@@ -217,14 +218,6 @@ docs/_build/
 # MkDocs documentation
 site/
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
 # Profiling data
 .prof
 
@@ -234,6 +227,30 @@ dmypy.json
 
 # Ancien répertoire src avec toutes les dépendances (NE PAS versionner)
 src/
+
+# Packages de déploiement Lambda spécifiques
+deployment*.zip
+deployment-*.zip
+deployment.zip
+deployment-complete.zip
+deployment-final.zip
+deployment-flat.zip
+deployment-updated.zip
+deployment-corrected.zip
+
+# Fichiers de réponse/test
+response.json
+*.response.json
+
+# Scripts de mise à jour temporaires
+update_lambda_code.py
+update_lambda_simple.py
+update_lambda_no_emoji.py
+update_with_complete_package.py
+create_flat_package.py
+create_complete_package.py
+create_final_package.py
+deploy_final_package.py
 
 # Fichiers de configuration locale
 config/local_config.py
@@ -263,6 +280,8 @@ deploy_local.ps1
 !template.yaml
 !infrastructure/cdk-stack.py
 !cloudformation-template.yaml
+!cloudformation-template-final.yaml
+!cloudformation-template-corrected.yaml
 
 # Code source propre (à versionner)
 !src_propre/
@@ -277,6 +296,9 @@ deploy_local.ps1
 # 3. Aucune facture réelle n'est dans le dépôt
 # 4. Les fichiers de build (.sam/, .aws-sam/) sont exclus
 # 5. Les environnements virtuels sont exclus
+# 6. Les packages de déploiement (.zip) sont exclus
+# 7. Le dossier lambda_package/ est exclu
+# 8. Les fichiers temporaires de mise à jour sont exclus
 
 # Pour vérifier ce qui sera ignoré :
 # git status --ignored
