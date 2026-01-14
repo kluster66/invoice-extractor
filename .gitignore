@@ -118,11 +118,12 @@ cdk.context.json
 *.template.yaml.bak
 *.template.json.bak
 
-# Lambda deployment packages
+# Lambda deployment packages (NE PAS versionner - très volumineux)
 *.zip
 deployments/
 package/
 lambda_package/
+lambda_package_minimal/
 
 # AWS Toolkit for VS Code
 .aws-toolkit/
@@ -228,50 +229,19 @@ site/
 # Ancien répertoire src avec toutes les dépendances (NE PAS versionner)
 src/
 
-# Packages de déploiement Lambda spécifiques
-deployment*.zip
-deployment-*.zip
-deployment.zip
-deployment-complete.zip
-deployment-final.zip
-deployment-flat.zip
-deployment-updated.zip
-deployment-corrected.zip
-
-# Packages de dépendances Lambda (NE PAS versionner)
-lambda_package_minimal/
-
-# Fichiers de réponse/test
+# Fichiers de réponse/test temporaires
 response.json
 *.response.json
 test_event.json
 test_payload.json
+
+# Fichiers de configuration AWS temporaires
 policy.json
 policy_updated.json
 s3-notification-config.json
 
-# Fichiers de test temporaires
-test_deploy.py
-test_deploy_no_emoji.py
-test_lambda.py
-
-# Scripts de mise à jour temporaires
-update_lambda_code.py
-update_lambda_simple.py
-update_lambda_no_emoji.py
-update_with_complete_package.py
-create_flat_package.py
-create_complete_package.py
-create_final_package.py
-deploy_final_package.py
-
-# Fichiers de configuration locale
-config/local_config.py
-config/local_settings.py
-
-# Fichiers de déploiement local
-deploy_local.sh
-deploy_local.ps1
+# Fichiers hex temporaires
+gitignore.hex
 
 # Fichiers de backup
 *.bak
@@ -295,6 +265,25 @@ deploy_local.ps1
 !cloudformation-template.yaml
 !cloudformation-template-final.yaml
 !cloudformation-template-corrected.yaml
+!cloudformation-template-python310.yaml
+
+# Inclure les scripts de déploiement utiles
+!deploy_with_cloudformation.py
+!deploy_with_cloudformation_simple.py
+!deploy_final_no_emoji.py
+!deploy_simple_step_by_step.py
+
+# Inclure les scripts de cleanup utiles
+!cleanup-aws-simple.ps1
+!cleanup-aws.sh
+
+# Inclure les scripts utilitaires
+!fix_imports.py
+
+# Inclure les scripts de test (optionnel)
+!test_deploy.py
+!test_deploy_no_emoji.py
+!test_lambda.py
 
 # Code source propre (à versionner)
 !src_propre/
@@ -318,36 +307,3 @@ deploy_local.ps1
 
 # Pour forcer l'ajout d'un fichier ignoré :
 # git add -f nom_du_fichier
-
-# ============================================
-# FICHIERS TEMPORAIRES SPÉCIFIQUES
-# ============================================
-
-# Scripts de déploiement temporaires
-deploy_auto.py
-deploy_final.py
-deploy_final_no_emoji.py
-deploy_simple_step_by_step.py
-deploy_with_cloudformation.py
-deploy_with_cloudformation_simple.py
-
-# Scripts de cleanup temporaires
-cleaning_aws.ps1
-cleanup-aws-fixed.ps1
-cleanup-aws-simple.ps1
-cleanup-aws.ps1
-cleanup-aws.sh
-
-# Scripts utilitaires temporaires
-fix_imports.py
-
-# Fichiers hex temporaires
-gitignore.hex
-
-# Versions alternatives du code (non utilisées en production)
-src_propre/main_fixed.py
-src_propre/main_simple.py
-src_propre/pdf_extractor_simple_only.py
-
-# Templates CloudFormation alternatifs
-cloudformation-template-python310.yaml
