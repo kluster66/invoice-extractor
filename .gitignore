@@ -240,9 +240,6 @@ policy.json
 policy_updated.json
 s3-notification-config.json
 
-# Fichiers hex temporaires
-gitignore.hex
-
 # Fichiers de backup
 *.bak
 *.backup
@@ -256,8 +253,13 @@ gitignore.hex
 !config/config.example.py
 
 # Inclure les scripts de déploiement
+!deploy.py
 !deploy.sh
 !deploy.ps1
+
+# Inclure les scripts de cleanup
+!cleanup-aws-simple.ps1
+!cleanup-aws.sh
 
 # Inclure les templates d'infrastructure
 !template.yaml
@@ -266,24 +268,6 @@ gitignore.hex
 !cloudformation-template-final.yaml
 !cloudformation-template-corrected.yaml
 !cloudformation-template-python310.yaml
-
-# Inclure les scripts de déploiement utiles
-!deploy_with_cloudformation.py
-!deploy_with_cloudformation_simple.py
-!deploy_final_no_emoji.py
-!deploy_simple_step_by_step.py
-
-# Inclure les scripts de cleanup utiles
-!cleanup-aws-simple.ps1
-!cleanup-aws.sh
-
-# Inclure les scripts utilitaires
-!fix_imports.py
-
-# Inclure les scripts de test (optionnel)
-!test_deploy.py
-!test_deploy_no_emoji.py
-!test_lambda.py
 
 # Code source propre (à versionner)
 !src_propre/

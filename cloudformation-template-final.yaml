@@ -5,7 +5,7 @@ Parameters:
   EnvironmentName:
     Type: String
     Description: Nom de l'environnement (dev, staging, prod)
-    Default: dev
+    Default: prod
   
   BucketName:
     Type: String
@@ -126,6 +126,7 @@ Resources:
                   - dynamodb:Query
                   - dynamodb:Scan
                   - dynamodb:BatchWriteItem
+                  - dynamodb:DescribeTable
                 Resource: !GetAtt InvoicesTable.Arn
               - Effect: Allow
                 Action:
@@ -142,27 +143,12 @@ Resources:
     Properties:
       FunctionName: !Sub invoice-extractor-${EnvironmentName}
       Description: Extrait les informations de factures PDF avec Bedrock
-      Runtime: python3.9
+      Runtime: python3.10
       Handler: main.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
-        ZipFile: |
-          import json
-          import boto3
-          import os
-          
-          def lambda_handler(event, context):
-              print(f"Event: {json.dumps(event)}")
-              return {
-                  'statusCode': 200,
-                  'body': json.dumps({
-                      'message': 'Lambda function created successfully',
-                      'environment': os.environ.get('ENVIRONMENT_NAME', 'dev'),
-                      'bucket': os.environ.get('S3_INPUT_BUCKET'),
-                      'table': os.environ.get('DYNAMODB_TABLE_NAME'),
-                      'model': os.environ.get('BEDROCK_MODEL_ID')
-                  })
-              }
+        S3Bucket: !Sub invoice-extractor-deployment-bucket-${AWS::AccountId}
+        S3Key: invoice-extractor-lambda.zip
       Timeout: 300
       MemorySize: 1024
       Environment:
@@ -187,12 +173,43 @@ Resources:
       Principal: s3.amazonaws.com
       SourceArn: !Sub arn:aws:s3:::${BucketName}
 
+  # Configuration de notification S3
+  S3NotificationConfiguration:
+    Type: AWS::S3::Bucket
+    DependsOn:
+      - InvoiceExtractorLambda
+      - LambdaInvokePermission
+    Properties:
+      BucketName: !Ref BucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .pdf
+            Function: !GetAtt InvoiceExtractorLambda.Arn
+
   # CloudWatch Log Group pour Lambda
   LambdaLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/invoice-extractor-${EnvironmentName}
       RetentionInDays: 30
+
+  # Bucket S3 pour le code de déploiement
+  DeploymentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub invoice-extractor-deployment-bucket-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Application
+          Value: invoice-extractor
 
 Outputs:
   BucketName:
@@ -226,3 +243,11 @@ Outputs:
   S3ConsoleUrl:
     Description: URL de la console S3
     Value: !Sub https://s3.console.aws.amazon.com/s3/buckets/${BucketName}
+  
+  DeploymentBucketName:
+    Description: Nom du bucket de déploiement
+    Value: !Ref DeploymentBucket
+  
+  CloudWatchLogsUrl:
+    Description: URL des logs CloudWatch
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#logsV2:log-groups/log-group/$252Faws$252Flambda$252Finvoice-extractor-${EnvironmentName}

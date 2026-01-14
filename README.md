@@ -1,313 +1,214 @@
-# Invoice Extractor - Extraction de factures PDF avec AWS Bedrock
+# Invoice Extractor avec AWS Bedrock
 
-Outil Python pour extraire automatiquement des informations de factures PDF en utilisant AWS Bedrock (LLM) et les stocker dans DynamoDB.
+Outil serverless pour extraire automatiquement les informations structurées des factures PDF en utilisant AWS Bedrock (LLM).
 
-## 🎯 Fonctionnalités
+## 🚀 Fonctionnalités
 
-- **Extraction PDF intelligente** : PyPDF2 + pdfplumber avec fallback automatique
-- **Support multi-modèles Bedrock** : Claude 3, Llama 3, Amazon Titan, etc.
-- **Configuration AWS intelligente** : Détection automatique région/credentials depuis AWS CLI
-- **Intégration S3** : Déclenchement automatique sur dépôt de fichiers
-- **Stockage DynamoDB** : Sauvegarde structurée avec indexes optimisés
-- **Workflow AWS** : Architecture serverless scalable
-- **Parsing robuste** : Extraction JSON même avec texte supplémentaire
-- **Normalisation des champs** : Support français/anglais automatique
+- **Extraction automatique** : Traitement automatique des factures PDF uploadées vers S3
+- **Multi-modèles** : Support de Claude 3, Llama 3, Amazon Titan
+- **Parsing robuste** : Extraction fiable des données JSON depuis les réponses LLM
+- **Stockage structuré** : Données stockées dans DynamoDB avec indexes secondaires
+- **Monitoring complet** : Logs CloudWatch et métriques
+- **Déploiement automatisé** : Infrastructure as Code avec CloudFormation
 
-## 📋 Champs extraits
+## 📋 Architecture
 
-L'outil extrait les informations suivantes des factures :
-- ✅ **Fournisseur** : Nom de la société émettrice
-- ✅ **Montant HT** : Montant hors taxes (nombre uniquement)
-- ✅ **Numéro de facture** : Identifiant unique de la facture
-- ✅ **Date de facture** : Format YYYY-MM-DD
-- ✅ **Numéro Chrono** : Numéro chronologique du document
-- ✅ **Période de couverture** : Période couverte par la facture
-- ✅ **Nom du fichier** : Nom du fichier source
-
-## 🏗️ Architecture
-
-```mermaid
-graph TB
-    S3[S3 Bucket] -->|Déclencheur| Lambda[AWS Lambda]
-    Lambda -->|Extraction texte| PDF[PDF Extractor]
-    PDF -->|Texte extrait| Bedrock[AWS Bedrock]
-    Bedrock -->|Données structurées| DynamoDB[DynamoDB Table]
-    Bedrock -->|Logs| CloudWatch[CloudWatch Logs]
+```
+S3 (Upload PDF) → Lambda → Bedrock (LLM) → DynamoDB (Stockage)
+       ↑               ↓
+  Notification    Logs CloudWatch
 ```
 
-## ✅ Déploiement CloudFormation réussi
-La stack `invoice-extractor-final` a été déployée avec succès dans la région `us-west-2` via CloudFormation direct. Toutes les ressources AWS sont opérationnelles :
+## 🛠️ Prérequis
 
-- **S3 Bucket** : `invoice-extractor-bucket-1736604000`
-- **DynamoDB Table** : `invoices-extractor`
-- **Lambda Function** : `invoice-extractor-lambda`
-- **IAM Role** : `invoice-extractor-role`
-- **CloudWatch Logs** : Configurés
+1. **Compte AWS** avec accès à :
+   - AWS Bedrock (modèles activés)
+   - Lambda, S3, DynamoDB, CloudFormation
+2. **AWS CLI** configuré :
+   ```bash
+   aws configure
+   ```
+3. **Python 3.8+** et **pip**
 
-## 🚀 Installation rapide
+## 🚀 Déploiement rapide
 
-### Prérequis
-- Python 3.8+ (⚠️ SAM nécessite Python ≤3.13)
-- AWS CLI configuré (`aws configure`)
-- Compte AWS avec accès à Bedrock, S3, DynamoDB, Lambda
+### Option 1 : Déploiement automatique (recommandé)
 
-### Installation en 3 étapes
 ```bash
-# 1. Cloner et installer
-git clone <repository-url>
+# 1. Cloner le projet
+git clone <url-du-repo>
 cd invoice-extractor
+
+# 2. Installer les dépendances
 pip install -r requirements.txt
 
-# 2. Configurer (optionnel - utilise AWS CLI par défaut)
-cp config/env.example .env  # Éditer si nécessaire
-
-# 3. Tester
-python -m src_propre.main test_factures/votre_facture.pdf
+# 3. Déployer
+python deploy.py
 ```
 
-## ⚙️ Configuration intelligente
+Le script `deploy.py` gère automatiquement :
+- ✅ Validation du template CloudFormation
+- ✅ Création du package Lambda
+- ✅ Upload du code vers S3
+- ✅ Déploiement de la stack CloudFormation
+- ✅ Configuration des notifications S3
+- ✅ Affichage des URLs de monitoring
 
-### Détection automatique AWS
-L'application détecte automatiquement :
-1. **Région AWS** : Variable d'environnement → AWS CLI → us-west-2 par défaut
-2. **Credentials** : AWS CLI → Variables d'environnement
+### Option 2 : Déploiement manuel
 
-### Modèles Bedrock supportés
-```python
-# Modèles disponibles (configurables via .env ou code)
-- Claude 3.5 Sonnet : anthropic.claude-3-5-sonnet-20241022-v2:0
-- Claude 3 Haiku : anthropic.claude-3-haiku-20240307-v1:0
-- Llama 3.1 70B : meta.llama3-1-70b-instruct-v1:0
-- Amazon Titan : amazon.titan-text-express-v1
-# + 125 autres modèles disponibles dans us-west-2
-```
-
-### Configuration minimale (.env)
-```env
-# Optionnel - utilise AWS CLI par défaut
-AWS_REGION=us-west-2
-BEDROCK_MODEL_ID=meta.llama3-1-70b-instruct-v1:0
-DYNAMODB_TABLE_NAME=invoices
-S3_INPUT_BUCKET=votre-bucket-factures
-```
-
-## 🧪 Utilisation
-
-### Test local
 ```bash
-# Extraction simple
-python -m src_propre.main chemin/vers/facture.pdf
+# 1. Créer le package Lambda
+python deploy.py
 
-# Test avec modèle spécifique
-python -c "from config.config import Config; Config.set_model('llama-3-1-70b')"
-python -m src_propre.main facture.pdf
-
-# Tester différents modèles
-python test_models_simple.py
+# 2. Déployer avec CloudFormation
+aws cloudformation create-stack \
+  --stack-name invoice-extractor \
+  --template-body file://cloudformation-template-final.yaml \
+  --parameters \
+    ParameterKey=EnvironmentName,ParameterValue=prod \
+    ParameterKey=BedrockModelId,ParameterValue=meta.llama3-1-70b-instruct-v1:0 \
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+  --region us-west-2
 ```
 
-### Mode production (Lambda)
-L'application est conçue pour fonctionner comme une fonction AWS Lambda déclenchée par S3.
+## 📊 Ressources créées
 
-### Structure des données extraites
-```json
-{
-  "fournisseur": "BOARDRIDERS TRADING ESPAÑA SLU",
-  "montant_ht": 102.50,
-  "numero_facture": "TA7JP0239347",
-  "date_facture": "2025-11-19",
-  "Le numero Chrono du document": "954669788",
-  "La période de couverture": "1 Oct. a 31 Oct.",
-  "nom du fichier que tu trouves ici": "2140 1902095741 210515 TELEFONICA MG PLVT.pdf",
-  "filename": "2140 1902095741 210515 TELEFONICA MG PLVT.pdf",
-  "extraction_date": "2026-01-11T10:45:17.167577",
-  "pdf_path": "test_factures/2140 1902095741 210515 TELEFONICA MG PLVT.pdf"
-}
-```
+Le déploiement crée automatiquement :
 
-## 🔧 Fonctionnalités avancées
+| Service | Nom | Description |
+|---------|-----|-------------|
+| **S3** | `invoice-extractor-bucket-*` | Bucket pour les factures PDF |
+| **Lambda** | `invoice-extractor-prod` | Fonction d'extraction |
+| **DynamoDB** | `invoices-extractor` | Table de stockage |
+| **CloudWatch** | `/aws/lambda/...` | Logs et monitoring |
+| **IAM** | Rôle avec permissions | Accès S3, DynamoDB, Bedrock |
 
-### Support multi-modèles
-Le client Bedrock adapte automatiquement le format de requête selon le modèle :
-- **Anthropic Claude** : Format Completions API
-- **Meta Llama** : Format spécifique Llama
-- **Amazon Titan** : Format Amazon
-- **AI21/Cohere** : Formats respectifs
+## 🧪 Test
 
-### Parsing robuste
-Extraction de JSON même avec :
-- Blocs de code ```json ... ```
-- Texte supplémentaire avant/après
-- Réponses multiples
-- Champs en français/anglais
+1. **Uploader une facture** dans le bucket S3
+2. **Vérifier l'exécution** dans les logs CloudWatch
+3. **Consulter les données** dans DynamoDB
 
-### Normalisation automatique
-Les champs sont normalisés automatiquement :
-- `fournisseur` ↔ `supplier` ↔ `vendor`
-- `montant_ht` ↔ `amount` ↔ `total`
-- `numero_facture` ↔ `invoice_number`
-- etc.
-
-## 🚀 Déploiement AWS
-
-### ⚠️ Important : Problème SAM avec Python 3.14
-AWS SAM CLI a une incompatibilité avec Python 3.14 (Pydantic v1). Solutions :
-
-**Solution A : Utiliser CloudFormation direct (recommandé et testé)**
 ```bash
-# Script de déploiement simplifié
-python deploy_with_cloudformation.py
+# Tester avec un fichier de test
+aws s3 cp test_factures/example.pdf s3://[bucket-name]/
+
+# Vérifier les logs
+aws logs tail /aws/lambda/invoice-extractor-prod --follow
+
+# Vérifier les données
+aws dynamodb scan --table-name invoices-extractor
 ```
 
-**Solution B : Utiliser Python 3.12 pour SAM**
-```bash
-# Installer Python 3.12, puis :
-python3.12 -m venv venv
-venv\Scripts\activate  # Windows
-pip install aws-sam-cli
-sam build
-sam deploy --guided
-```
+## 🔧 Configuration
 
-**Solution C : Utiliser Docker avec SAM**
-```bash
-sam build --use-container
-sam deploy --guided
-```
+### Variables d'environnement
 
-### Options de déploiement disponibles :
+| Variable | Description | Valeur par défaut |
+|----------|-------------|-------------------|
+| `DYNAMODB_TABLE_NAME` | Table DynamoDB | `invoices-extractor` |
+| `S3_INPUT_BUCKET` | Bucket S3 | Auto-détecté |
+| `BEDROCK_MODEL_ID` | Modèle Bedrock | `meta.llama3-1-70b-instruct-v1:0` |
+| `LOG_LEVEL` | Niveau de logs | `INFO` |
 
-1. **✅ CloudFormation direct** (sans SAM/CDK) - `deploy_with_cloudformation.py` - **TESTÉ ET FONCTIONNEL**
-2. **AWS SAM** - `template.yaml` (nécessite Python ≤3.13)
-3. **AWS CDK** - `infrastructure/cdk-stack.py` (nécessite Node.js)
-4. **Déploiement manuel** - Voir `DEPLOY.md`
+### Modèles supportés
 
-### Déploiement rapide avec CloudFormation
-```bash
-# 1. Vérifier la configuration AWS
-python deploy_with_cloudformation.py
+- `meta.llama3-1-70b-instruct-v1:0` (recommandé, pas d'activation requise)
+- `anthropic.claude-3-5-sonnet-*`
+- `amazon.titan-text-express-v1`
 
-# 2. Choisir l'option 1 (Valider le template)
-# 3. Choisir l'option 2 (Créer la stack)
-# 4. Suivre la progression dans CloudFormation
-```
-
-## 📊 Coûts estimés
-
-Pour 1000 factures/mois :
-- **Bedrock (Llama 3.1 70B)** : ~$2-5
-- **Lambda** : ~$0.20
-- **S3** : ~$0.50
-- **DynamoDB** : ~$1-2
-- **Total** : ~$4-8/mois
-
-## 🧪 Tests
-
-### Tests unitaires
-```bash
-pytest tests/ -v
-```
-
-### Tests d'intégration
-```bash
-# Tester l'extraction complète
-python test_real_invoice_simple.py
-
-# Tester différents modèles
-python test_models_simple.py
-
-# Lister les modèles disponibles
-python list_available_models.py
-```
-
-## 🔧 Développement
-
-### Structure du projet
-```
-invoice-extractor/
-├── src_propre/              # Code source propre (à versionner)
-│   ├── main.py             # Handler Lambda
-│   ├── bedrock_client.py   # Client multi-modèles Bedrock
-│   ├── dynamodb_client.py  # Client DynamoDB avec indexes
-│   ├── pdf_extractor.py    # Extraction PDF (dual library)
-│   └── config.py           # Configuration intelligente
-├── config/                 # Configuration
-│   ├── config.py          # (copié dans src_propre/)
-│   └── env.example        # Template variables d'environnement
-├── infrastructure/         # Infrastructure as Code
-│   └── cdk-stack.py       # Stack AWS CDK
-├── tests/                 # Tests
-├── scripts/               # Scripts utilitaires
-├── .gitignore            # Fichiers à ignorer pour GitHub
-├── cloudformation-template.yaml  # Template CloudFormation
-├── template.yaml         # Template AWS SAM
-├── deploy_with_cloudformation.py # Script de déploiement
-└── requirements.txt      # Dépendances Python
-```
-
-### Ajouter un nouveau modèle
-1. Ajouter l'ID dans `Config.BEDROCK_AVAILABLE_MODELS`
-2. Le client détectera automatiquement le format requis
-
-### Personnaliser l'extraction
-1. Modifier le prompt dans `src_propre/bedrock_client.py`
-2. Ajouter des mappings dans `_normalize_field_names()`
-3. Mettre à jour la validation
-
-## 🆘 Dépannage
+## 🐛 Dépannage
 
 ### Problèmes courants
 
 1. **"Model access not granted"**
    ```bash
-   # Activer l'accès au modèle
-   # AWS Console → Bedrock → Model access → Request access
+   # Activer l'accès dans la console AWS Bedrock
+   # Ou utiliser Llama 3.1 (pas d'activation requise)
    ```
 
-2. **"Credentials not found"**
+2. **Permissions IAM manquantes**
    ```bash
-   # Configurer AWS CLI
-   aws configure
-   # Ou créer un fichier .env
+   # Vérifier que le rôle Lambda a les permissions :
+   # - dynamodb:DescribeTable
+   # - s3:GetObject
+   # - bedrock:InvokeModel
    ```
 
-3. **"JSON parsing error"**
-   - Le modèle fonctionne mais le format de réponse varie
-   - Le parsing amélioré gère la plupart des cas
-
-4. **"sam build échoue avec Python 3.14"**
+3. **Fichier trop volumineux**
    ```bash
-   # Utiliser CloudFormation direct
-   python deploy_with_cloudformation.py
-   # Ou installer Python 3.12
+   # Augmenter la mémoire Lambda (max 10240 MB)
+   # Augmenter le timeout (max 900 secondes)
    ```
 
 ### Logs et monitoring
-- **CloudWatch Logs** : `/aws/lambda/invoice-extractor`
-- **Métriques** : ExtractionSuccess, ExtractionFailure, ProcessingTime
-- **Table DynamoDB** : Vérifier les données extraites
+
+- **CloudWatch Logs** : `/aws/lambda/invoice-extractor-prod`
+- **Métriques Lambda** : Invocations, erreurs, durée
+- **Console S3** : Fichiers uploadés
+- **Console DynamoDB** : Données extraites
+
+## 📁 Structure du projet
+
+```
+invoice-extractor/
+├── src_propre/              # Code source
+│   ├── main.py             # Handler Lambda
+│   ├── bedrock_client.py   # Client multi-modèles
+│   ├── dynamodb_client.py  # Client DynamoDB
+│   ├── pdf_extractor.py    # Extraction PDF
+│   └── config.py           # Configuration
+├── cloudformation-template-final.yaml  # Template IaC
+├── deploy.py               # Script de déploiement
+├── cleanup-aws-simple.ps1  # Nettoyage AWS
+├── requirements.txt        # Dépendances
+├── .gitignore             # Fichiers à ignorer
+└── README.md              # Documentation
+```
+
+## 🔄 Mise à jour
+
+```bash
+# Mettre à jour le code Lambda
+python deploy.py
+
+# Ou mettre à jour manuellement
+aws lambda update-function-code \
+  --function-name invoice-extractor-prod \
+  --zip-file fileb://invoice-extractor-lambda.zip \
+  --region us-west-2
+```
+
+## 🧹 Nettoyage
+
+```bash
+# Supprimer la stack CloudFormation
+aws cloudformation delete-stack --stack-name invoice-extractor --region us-west-2
+
+# Ou utiliser le script PowerShell
+powershell ./cleanup-aws-simple.ps1
+```
 
 ## 📄 Licence
 
-MIT License - voir `LICENSE` pour plus de détails.
+MIT License - voir [LICENSE](LICENSE) pour plus de détails.
 
 ## 🤝 Contribution
 
-Les contributions sont les bienvenues ! Voir `CONTRIBUTING.md` pour les guidelines.
+Les contributions sont les bienvenues ! Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour les guidelines.
 
 ## 📞 Support
 
 Pour les problèmes :
 1. Vérifier les logs CloudWatch
-2. Tester avec `test_models_simple.py`
+2. Tester avec différents modèles Bedrock
 3. Ouvrir une issue sur GitHub
 
 ---
 
 **Dernière mise à jour** : Janvier 2026  
-**Version** : 2.0.1  
-**Statut** : Production Ready ✅  
-**Modèle par défaut** : Llama 3.1 70B (fonctionne sans activation)  
-**Compatibilité Python** : 3.8+ (⚠️ SAM nécessite ≤3.13)  
-**Options de déploiement** : ✅ CloudFormation (testé), SAM, CDK, Manuel  
-**Stack déployée** : `invoice-extractor-final` en `us-west-2` ✅
+**Version** : 2.1.0  
+**Statut** : Production Ready  
+**Modèle par défaut** : Llama 3.1 70B  
+**Runtime Lambda** : Python 3.10  
+**Région AWS** : us-west-2

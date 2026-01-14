@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Script de déploiement CloudFormation pour l'outil d'extraction de factures.
-Version simple sans émojis pour compatibilité Windows.
+Script de déploiement complet pour l'outil d'extraction de factures PDF.
+Ce script gère tout le processus de déploiement automatiquement.
 """
 
 import subprocess
 import sys
 import json
-import time
 import os
+import zipfile
+import shutil
 from pathlib import Path
 
 def run_command(command, description=None):
@@ -27,7 +28,7 @@ def run_command(command, description=None):
         )
         
         if result.returncode != 0:
-            print(f"Erreur: Commande échouée: {command}")
+            print(f"ERREUR: Commande échouée: {command}")
             if result.stderr:
                 print(f"Details: {result.stderr[:500]}")
             return False, result.stderr
@@ -35,7 +36,7 @@ def run_command(command, description=None):
         return True, result.stdout
     
     except Exception as e:
-        print(f"Exception: {e}")
+        print(f"EXCEPTION: {e}")
         return False, str(e)
 
 def check_aws_cli():
@@ -45,7 +46,7 @@ def check_aws_cli():
     success, output = run_command("aws sts get-caller-identity")
     if not success:
         print("ERREUR: AWS CLI n'est pas configuré ou les credentials sont invalides.")
-        print("Conseil: Exécutez 'aws configure' pour configurer vos credentials.")
+        print("CONSEIL: Exécutez 'aws configure' pour configurer vos credentials.")
         return False
     
     # Extraire l'ID du compte
@@ -78,52 +79,11 @@ def validate_template():
         return True
     else:
         print("ERREUR: Template CloudFormation invalide")
-        print("Details:", output[:500] if output else "Aucun détail")
         return False
 
-def check_bedrock_access():
-    """Vérifie l'accès à AWS Bedrock."""
-    print("\nVerification de l'accès à AWS Bedrock...")
-    
-    success, output = run_command(
-        "aws bedrock list-foundation-models --region us-west-2 --query 'modelSummaries[].modelId' --output json"
-    )
-    
-    if success:
-        try:
-            models = json.loads(output)
-            if models:
-                print(f"OK: Accès Bedrock - {len(models)} modèles disponibles")
-                
-                # Afficher quelques modèles populaires
-                popular_models = [
-                    "anthropic.claude-3-5-sonnet",
-                    "meta.llama3-1-70b-instruct",
-                    "amazon.titan-text-express"
-                ]
-                
-                available_popular = []
-                for model in popular_models:
-                    if any(model in m for m in models):
-                        available_popular.append(model)
-                
-                if available_popular:
-                    print(f"   Modèles populaires disponibles: {', '.join(available_popular)}")
-                return True
-            else:
-                print("ATTENTION: Aucun modèle Bedrock trouvé")
-                return False
-        except:
-            print("OK: Accès Bedrock")
-            return True
-    else:
-        print("ATTENTION: Impossible d'accéder à Bedrock. Vérifiez les permissions IAM.")
-        print("Conseil: Vous devrez peut-être activer Bedrock dans la console AWS.")
-        return True  # Continuer quand même
-
-def create_lambda_package():
-    """Crée le package ZIP pour la fonction Lambda."""
-    print("\nCreation du package Lambda...")
+def create_minimal_lambda_package():
+    """Crée un package Lambda minimal avec seulement les dépendances nécessaires."""
+    print("\nCreation du package Lambda minimal...")
     
     # Créer un répertoire temporaire pour le package
     package_dir = "lambda_package_deploy"
@@ -131,7 +91,6 @@ def create_lambda_package():
     try:
         # Nettoyer l'ancien package
         if os.path.exists(package_dir):
-            import shutil
             shutil.rmtree(package_dir)
         
         # Créer le répertoire
@@ -143,20 +102,38 @@ def create_lambda_package():
             print(f"ERREUR: Répertoire source non trouvé: {src_dir}")
             return False, None
         
-        import shutil
+        # Copier tous les fichiers Python
         for item in os.listdir(src_dir):
             src_path = os.path.join(src_dir, item)
             dst_path = os.path.join(package_dir, item)
             
-            if os.path.isfile(src_path):
+            if os.path.isfile(src_path) and item.endswith('.py'):
                 shutil.copy2(src_path, dst_path)
-            elif os.path.isdir(src_path):
-                shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+                print(f"  Copié: {item}")
         
         print(f"OK: Code source copié depuis {src_dir}")
         
+        # Dépendances minimales pour Lambda
+        dependencies = [
+            "boto3",
+            "botocore",
+            "PyPDF2",
+            "python-dotenv",
+            "typing_extensions"
+        ]
+        
+        # Installer les dépendances dans le package
+        print("Installation des dépendances...")
+        for dep in dependencies:
+            success, output = run_command(
+                f"pip install {dep} --target {package_dir} --no-deps"
+            )
+            if success:
+                print(f"  Installé: {dep}")
+            else:
+                print(f"  ATTENTION: Impossible d'installer {dep}")
+        
         # Créer le fichier ZIP
-        import zipfile
         zip_path = "invoice-extractor-lambda.zip"
         
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -175,10 +152,25 @@ def create_lambda_package():
         return True, zip_path
     
     except Exception as e:
-        print(f"ERREUR: Création du package: {e}")
+        print(f"ERREUR lors de la création du package: {e}")
         return False, None
 
-def deploy_stack():
+def upload_to_s3(bucket_name, zip_path):
+    """Upload le package Lambda vers S3."""
+    print(f"\nUpload du package Lambda vers S3: {bucket_name}...")
+    
+    success, output = run_command(
+        f"aws s3 cp {zip_path} s3://{bucket_name}/invoice-extractor-lambda.zip --region us-west-2"
+    )
+    
+    if success:
+        print("OK: Package uploadé vers S3")
+        return True
+    else:
+        print("ERREUR: Echec de l'upload vers S3")
+        return False
+
+def deploy_cloudformation_stack():
     """Déploie la stack CloudFormation."""
     print("\nDeploiement de la stack CloudFormation...")
     
@@ -187,8 +179,7 @@ def deploy_stack():
     
     # Vérifier si la stack existe déjà
     success, output = run_command(
-        f"aws cloudformation describe-stacks --stack-name {stack_name} --region us-west-2",
-        "Verification de l'existence de la stack"
+        f"aws cloudformation describe-stacks --stack-name {stack_name} --region us-west-2"
     )
     
     if success:
@@ -197,7 +188,7 @@ def deploy_stack():
         response = input("Voulez-vous la mettre à jour? (oui/non): ")
         
         if response.lower() != 'oui':
-            print("Deploiement annulé")
+            print("ANNULATION: Déploiement annulé")
             return False
         
         command = "update-stack"
@@ -224,14 +215,13 @@ def deploy_stack():
     success, output = run_command(cmd)
     
     if not success:
-        print(f"ERREUR: {action} de la stack")
-        print("Details:", output[:500] if output else "Aucun détail")
+        print(f"ERREUR: Echec de la {action} de la stack")
         return False
     
-    print(f"OK: Commande de {action} envoyée")
+    print(f"OK: Commande de {action} envoyée avec succès")
     
     # Attendre la complétion
-    print(f"\nAttente de la {action} de la stack...")
+    print(f"\nAttente de la {action} de la stack (cela peut prendre 2-3 minutes)...")
     
     wait_cmd = f"aws cloudformation wait stack-{command.replace('stack', '')}-complete " \
                f"--stack-name {stack_name} --region us-west-2"
@@ -243,8 +233,8 @@ def deploy_stack():
         return True
     else:
         print(f"ATTENTION: La {action} de la stack a pris trop de temps ou a échoué")
-        print("Conseil: Vérifiez l'état dans la console CloudFormation")
-        return True  # Retourner True quand même
+        print("CONSEIL: Vérifiez l'état dans la console CloudFormation")
+        return True  # Retourner True quand même pour afficher les outputs
 
 def get_stack_outputs():
     """Récupère les outputs de la stack CloudFormation."""
@@ -260,8 +250,9 @@ def get_stack_outputs():
     if success and output.strip():
         try:
             outputs = json.loads(output)
-            print("\nDEPLOIEMENT REUSSI !")
-            print("=" * 50)
+            print("\n" + "=" * 60)
+            print("DEPLOIEMENT REUSSI !")
+            print("=" * 60)
             
             for item in outputs:
                 key = item.get('OutputKey', 'N/A')
@@ -269,11 +260,11 @@ def get_stack_outputs():
                 description = item.get('Description', '')
                 
                 print(f"\n{key}:")
-                print(f"   {value}")
+                print(f"  {value}")
                 if description:
-                    print(f"   {description}")
+                    print(f"  {description}")
             
-            print("\n" + "=" * 50)
+            print("\n" + "=" * 60)
             
             # Afficher les instructions d'utilisation
             print("\nINSTRUCTIONS D'UTILISATION:")
@@ -298,7 +289,7 @@ def test_deployment():
     # Récupérer le nom du bucket depuis les outputs
     success, output = run_command(
         "aws cloudformation describe-stacks --stack-name invoice-extractor --region us-west-2 "
-        "--query 'Stacks[0].Outputs[?OutputKey==`InvoiceBucketName`].OutputValue' --output text"
+        "--query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' --output text"
     )
     
     if success and output.strip():
@@ -314,123 +305,114 @@ def test_deployment():
             if response.lower() == 'oui':
                 print(f"\nUpload du fichier de test vers S3...")
                 
-                # Échapper les espaces dans le nom de fichier
-                escaped_test_file = test_file.replace(' ', '` ')
                 success, upload_output = run_command(
                     f'aws s3 cp "{test_file}" s3://{bucket_name}/ --region us-west-2'
                 )
                 
                 if success:
-                    print("OK: Fichier uploadé")
+                    print("OK: Fichier uploadé avec succès")
                     print("\nLa fonction Lambda devrait s'exécuter dans quelques secondes...")
-                    print("Conseil: Vérifiez les logs CloudWatch pour voir l'extraction")
+                    print("CONSEIL: Vérifiez les logs CloudWatch pour voir l'extraction")
                 else:
-                    print("ERREUR: Upload du fichier")
+                    print("ERREUR: Echec de l'upload du fichier")
         else:
             print("INFO: Aucun fichier de test trouvé")
     else:
         print("INFO: Impossible de récupérer le nom du bucket")
 
+def cleanup():
+    """Nettoie les fichiers temporaires."""
+    print("\nNettoyage des fichiers temporaires...")
+    
+    files_to_remove = [
+        "invoice-extractor-lambda.zip",
+        "lambda_package_deploy",
+        "response.json"
+    ]
+    
+    for file in files_to_remove:
+        if os.path.exists(file):
+            if os.path.isdir(file):
+                shutil.rmtree(file)
+            else:
+                os.remove(file)
+            print(f"  Supprimé: {file}")
+    
+    print("OK: Nettoyage terminé")
+
 def main():
     """Fonction principale."""
     print("=" * 60)
-    print("DEPLOIEMENT CLOUDFORMATION - Invoice Extractor")
+    print("DEPLOIEMENT COMPLET - INVOICE EXTRACTOR")
     print("=" * 60)
     
-    # Vérifier les prérequis
-    if not check_aws_cli():
-        return 1
-    
-    # Menu principal
-    print("\nMENU DE DEPLOIEMENT:")
-    print("1. Valider le template CloudFormation")
-    print("2. Vérifier l'accès à AWS Bedrock")
-    print("3. Créer le package Lambda")
-    print("4. Déployer la stack complète")
-    print("5. Tester le déploiement")
-    print("6. Tout faire (recommandé)")
-    print("0. Quitter")
-    
     try:
-        choice = input("\nVotre choix: ")
-        
-        if choice == "0":
-            print("Au revoir!")
-            return 0
-        
-        elif choice == "1":
-            validate_template()
-            
-        elif choice == "2":
-            check_bedrock_access()
-            
-        elif choice == "3":
-            success, zip_path = create_lambda_package()
-            if success:
-                print(f"\nLe package est prêt: {zip_path}")
-                print("   Vous pouvez maintenant déployer la stack (option 4)")
-            
-        elif choice == "4":
-            # Valider d'abord
-            if not validate_template():
-                print("ERREUR: Impossible de déployer un template invalide")
-                return 1
-            
-            # Créer le package
-            success, zip_path = create_lambda_package()
-            if not success:
-                print("ERREUR: Impossible de créer le package Lambda")
-                return 1
-            
-            # Déployer la stack
-            if deploy_stack():
-                get_stack_outputs()
-            
-        elif choice == "5":
-            test_deployment()
-            
-        elif choice == "6":
-            # Tout faire en séquence
-            print("\nLANCEMENT DU DEPLOIEMENT COMPLET...")
-            
-            # 1. Vérifier AWS CLI
-            if not check_aws_cli():
-                return 1
-            
-            # 2. Valider le template
-            if not validate_template():
-                return 1
-            
-            # 3. Vérifier Bedrock (avertissement seulement)
-            check_bedrock_access()
-            
-            # 4. Créer le package
-            success, zip_path = create_lambda_package()
-            if not success:
-                return 1
-            
-            # 5. Déployer la stack
-            if deploy_stack():
-                # 6. Afficher les outputs
-                get_stack_outputs()
-                
-                # 7. Tester
-                response = input("\nVoulez-vous tester avec un fichier de test? (oui/non): ")
-                if response.lower() == 'oui':
-                    test_deployment()
-            
-        else:
-            print("Choix invalide")
+        # 1. Vérifier AWS CLI
+        print("\n1. Verification des prérequis...")
+        if not check_aws_cli():
             return 1
         
-        print("\nOK: Opération terminée")
+        # 2. Valider le template
+        print("\n2. Validation du template...")
+        if not validate_template():
+            return 1
+        
+        # 3. Créer le package Lambda
+        print("\n3. Preparation du code Lambda...")
+        success, zip_path = create_minimal_lambda_package()
+        if not success:
+            return 1
+        
+        # 4. Uploader vers S3 (bucket temporaire pour le déploiement)
+        print("\n4. Upload du code vers S3...")
+        
+        # Créer un bucket temporaire pour le déploiement
+        import uuid
+        temp_bucket = f"invoice-extractor-deploy-{uuid.uuid4().hex[:8]}"
+        
+        success, output = run_command(
+            f"aws s3 mb s3://{temp_bucket} --region us-west-2"
+        )
+        
+        if not success:
+            print("ATTENTION: Impossible de créer le bucket temporaire")
+            print("CONSEIL: Utilisez un bucket existant ou créez-en un manuellement")
+            temp_bucket = input("Entrez le nom d'un bucket S3 existant: ")
+        
+        if not upload_to_s3(temp_bucket, zip_path):
+            return 1
+        
+        # 5. Déployer la stack CloudFormation
+        print("\n5. Deploiement de l'infrastructure...")
+        if not deploy_cloudformation_stack():
+            return 1
+        
+        # 6. Afficher les résultats
+        print("\n6. Recuperation des informations...")
+        get_stack_outputs()
+        
+        # 7. Nettoyer
+        cleanup()
+        
+        # 8. Tester (optionnel)
+        print("\n7. Test du déploiement...")
+        response = input("Voulez-vous tester avec un fichier de test? (oui/non): ")
+        if response.lower() == 'oui':
+            test_deployment()
+        
+        print("\n" + "=" * 60)
+        print("DEPLOIEMENT TERMINE AVEC SUCCES !")
+        print("=" * 60)
+        
         return 0
         
     except KeyboardInterrupt:
-        print("\n\nOperation interrompue")
+        print("\n\nANNULATION: Opération interrompue par l'utilisateur")
+        cleanup()
         return 1
     except Exception as e:
-        print(f"\nERREUR: {e}")
+        print(f"\nERREUR: Erreur inattendue: {e}")
+        cleanup()
         return 1
 
 if __name__ == "__main__":

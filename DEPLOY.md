@@ -1,490 +1,347 @@
-# Guide de Déploiement - Invoice Extractor
+# Guide de déploiement - Invoice Extractor
 
-Ce guide explique comment déployer l'extracteur de factures sur AWS.
-
-## 📋 Table des matières
-
-1. [Prérequis](#-prérequis)
-2. [⚠️ Problème SAM avec Python 3.14](#⚠️-problème-sam-avec-python-314)
-3. [Option 1: CloudFormation direct (recommandé)](#-option-1-cloudformation-direct-recommandé)
-4. [Option 2: AWS SAM](#-option-2-aws-sam)
-5. [Option 3: AWS CDK](#-option-3-aws-cdk)
-6. [Option 4: Déploiement manuel](#-option-4-déploiement-manuel)
-7. [Post-déploiement](#-post-déploiement)
-8. [Mise à jour](#-mise-à-jour)
-9. [Dépannage](#-dépannage)
+Ce guide explique comment déployer l'outil d'extraction de factures PDF sur AWS.
 
 ## 📋 Prérequis
 
 ### 1. Compte AWS
-- Compte AWS avec accès administrateur
-- Région supportée (us-west-2 recommandée)
+- Compte AWS avec accès aux services suivants :
+  - AWS Bedrock (avec modèles activés)
+  - AWS Lambda
+  - Amazon S3
+  - Amazon DynamoDB
+  - AWS CloudFormation
+  - AWS IAM
+  - Amazon CloudWatch
 
-### 2. Outils locaux
+### 2. Configuration locale
 ```bash
-# AWS CLI (obligatoire)
-aws --version  # >= 2.13.0
+# Installer AWS CLI
+# Télécharger depuis https://aws.amazon.com/cli/
 
-# Python
-python --version  # >= 3.8
+# Configurer AWS CLI
+aws configure
+# Entrer :
+# - AWS Access Key ID
+# - AWS Secret Access Key
+# - Default region: us-west-2
+# - Default output format: json
 
-# Optionnel selon la méthode
-sam --version     # Pour SAM (⚠️ nécessite Python ≤3.13)
-cdk --version     # Pour CDK (nécessite Node.js)
+# Vérifier la configuration
+aws sts get-caller-identity
 ```
 
-### 3. Permissions IAM
-L'utilisateur doit avoir les permissions :
-- `IAM:*` (création de rôles)
-- `Lambda:*` (création de fonctions)
-- `S3:*` (création de buckets)
-- `DynamoDB:*` (création de tables)
-- `CloudFormation:*` (pour SAM/CDK)
-- `Bedrock:*` (accès aux modèles)
-
-## ⚠️ Problème SAM avec Python 3.14
-
-**AWS SAM CLI a une incompatibilité avec Python 3.14** (Pydantic v1).
-
-### Solutions :
-
-**A. Utiliser CloudFormation direct (recommandé)**
+### 3. Environnement Python
 ```bash
-python deploy_with_cloudformation.py
+# Python 3.8 ou supérieur
+python --version
+
+# Installer les dépendances
+pip install -r requirements.txt
 ```
 
-**B. Utiliser Python 3.12 pour SAM**
+## 🚀 Déploiement automatique (recommandé)
+
+### Option 1 : Script de déploiement complet
 ```bash
-# Installer Python 3.12
-python3.12 -m venv venv
-venv\Scripts\activate  # Windows
-pip install aws-sam-cli
+# Exécuter le script de déploiement
+python deploy.py
 ```
 
-**C. Utiliser Docker avec SAM**
+Le script effectue automatiquement :
+1. ✅ Vérification de la configuration AWS
+2. ✅ Validation du template CloudFormation
+3. ✅ Création du package Lambda
+4. ✅ Upload du code vers S3
+5. ✅ Déploiement de la stack CloudFormation
+6. ✅ Configuration des notifications S3
+7. ✅ Affichage des URLs de monitoring
+
+### Option 2 : Déploiement étape par étape
+
+#### Étape 1 : Préparer le code Lambda
 ```bash
-sam build --use-container
+# Créer le package ZIP
+python -c "
+import zipfile
+import os
+
+# Créer un package minimal
+with zipfile.ZipFile('invoice-extractor-lambda.zip', 'w') as zipf:
+    # Ajouter le code source
+    for root, dirs, files in os.walk('src_propre'):
+        for file in files:
+            if file.endswith('.py'):
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, 'src_propre')
+                zipf.write(file_path, arcname)
+    
+    # Ajouter les dépendances minimales
+    os.system('pip install boto3 botocore PyPDF2 python-dotenv typing_extensions -t temp_deps --no-deps')
+    for root, dirs, files in os.walk('temp_deps'):
+        for file in files:
+            if file.endswith('.py'):
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, 'temp_deps')
+                zipf.write(file_path, arcname)
+    
+    os.system('rm -rf temp_deps')
+"
 ```
 
-**D. Utiliser CDK (nécessite Node.js)**
+#### Étape 2 : Déployer l'infrastructure
 ```bash
-npm install -g aws-cdk
-cdk deploy
-```
-
-## 🚀 Option 1: CloudFormation direct (recommandé)
-
-### Script de déploiement simplifié
-```bash
-# 1. Exécuter le script interactif
-python deploy_with_cloudformation.py
-
-# 2. Suivre le menu :
-#    - Option 1 : Valider le template
-#    - Option 2 : Créer la stack
-#    - Option 3 : Mettre à jour la stack
-#    - Option 4 : Décrire la stack
-#    - Option 5 : Supprimer la stack
-```
-
-### Déploiement manuel avec CloudFormation
-```bash
-# 1. Valider le template
-aws cloudformation validate-template \
-  --template-body file://cloudformation-template.yaml \
-  --region us-west-2
-
-# 2. Créer la stack
+# Déployer la stack CloudFormation
 aws cloudformation create-stack \
-  --stack-name invoice-extractor-stack \
-  --template-body file://cloudformation-template.yaml \
+  --stack-name invoice-extractor \
+  --template-body file://cloudformation-template-final.yaml \
   --parameters \
     ParameterKey=EnvironmentName,ParameterValue=prod \
-    ParameterKey=BucketName,ParameterValue=invoice-extractor-bucket-$(date +%s) \
-    ParameterKey=TableName,ParameterValue=invoices \
     ParameterKey=BedrockModelId,ParameterValue=meta.llama3-1-70b-instruct-v1:0 \
-  --capabilities CAPABILITY_IAM \
-  --region us-west-2 \
-  --tags Key=Project,Value=InvoiceExtractor Key=Environment,Value=Production
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+  --region us-west-2
 
-# 3. Suivre la création
-aws cloudformation describe-stacks \
-  --stack-name invoice-extractor-stack \
+# Attendre la création (2-3 minutes)
+aws cloudformation wait stack-create-complete \
+  --stack-name invoice-extractor \
   --region us-west-2
 ```
 
-### Avantages CloudFormation
-- ✅ Pas besoin de SAM ou CDK
-- ✅ Compatible avec Python 3.14
-- ✅ Script de déploiement interactif inclus
-- ✅ Template prêt à l'emploi
-
-## ⚡ Option 2: AWS SAM
-
-### Installation SAM (⚠️ Python ≤3.13 requis)
+#### Étape 3 : Uploader le code Lambda
 ```bash
-# macOS
-brew tap aws/tap
-brew install aws-sam-cli
-
-# Windows (Chocolatey)
-choco install aws-sam-cli
-
-# Linux/Python
-pip install aws-sam-cli
-```
-
-### Déploiement
-```bash
-# 1. Naviguer dans le projet
-cd invoice-extractor
-
-# 2. Construire l'application
-sam build  # ⚠️ Échoue avec Python 3.14
-
-# Alternative avec Docker
-sam build --use-container
-
-# 3. Déployer (mode guidé)
-sam deploy --guided
-
-# 4. Déployer (mode non guidé)
-sam deploy --stack-name invoice-extractor \
-  --s3-bucket votre-bucket-deploiement \
+# Récupérer le nom du bucket de déploiement
+DEPLOYMENT_BUCKET=$(aws cloudformation describe-stacks \
+  --stack-name invoice-extractor \
   --region us-west-2 \
-  --capabilities CAPABILITY_IAM
+  --query 'Stacks[0].Outputs[?OutputKey==`DeploymentBucketName`].OutputValue' \
+  --output text)
+
+# Uploader le code
+aws s3 cp invoice-extractor-lambda.zip s3://$DEPLOYMENT_BUCKET/ --region us-west-2
+
+# Mettre à jour la fonction Lambda
+aws lambda update-function-code \
+  --function-name invoice-extractor-prod \
+  --s3-bucket $DEPLOYMENT_BUCKET \
+  --s3-key invoice-extractor-lambda.zip \
+  --region us-west-2
 ```
 
-### Paramètres SAM
-Lors du déploiement guidé, spécifier :
-- **Stack Name** : `invoice-extractor`
-- **AWS Region** : `us-west-2`
-- **Bedrock Model** : `meta.llama3-1-70b-instruct-v1:0`
-- **S3 Bucket Name** : `factures-{account-id}-{region}`
-- **Confirm changes** : `y`
-- **Save arguments** : `y`
+## 🧪 Test du déploiement
 
-## 🔧 Option 3: AWS CDK
-
-### Installation CDK (nécessite Node.js)
+### Test 1 : Uploader une facture
 ```bash
-# Installer CDK globalement
-npm install -g aws-cdk
+# Récupérer le nom du bucket
+BUCKET_NAME=$(aws cloudformation describe-stacks \
+  --stack-name invoice-extractor \
+  --region us-west-2 \
+  --query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' \
+  --output text)
 
-# Vérifier l'installation
-cdk --version
+# Uploader un fichier de test
+aws s3 cp test_factures/2140\ 1902095741\ 210515\ TELEFONICA\ MG\ PLVT.pdf \
+  s3://$BUCKET_NAME/ --region us-west-2
 ```
 
-### Déploiement
+### Test 2 : Vérifier les logs
 ```bash
-# 1. Installer les dépendances Python
-pip install aws-cdk-lib constructs
+# Vérifier les logs CloudWatch
+aws logs tail /aws/lambda/invoice-extractor-prod --follow --region us-west-2
 
-# 2. Synthétiser le template
-cdk synth
-
-# 3. Bootstrap (première fois seulement)
-cdk bootstrap aws://ACCOUNT-ID/us-west-2
-
-# 4. Déployer
-cdk deploy --require-approval never
-
-# Alternative : utiliser le script Python
-python app.py
-cdk deploy
+# Ou voir les derniers logs
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/invoice-extractor-prod \
+  --region us-west-2 \
+  --limit 20 \
+  --query 'events[].message'
 ```
 
-### Script de déploiement CDK
+### Test 3 : Vérifier les données
 ```bash
-# Utiliser le script inclus
-python deploy_with_cdk_simple.py
+# Vérifier les données dans DynamoDB
+aws dynamodb scan \
+  --table-name invoices-extractor \
+  --region us-west-2 \
+  --query 'Items'
 ```
 
-## 🛠️ Option 4: Déploiement manuel
+## 🔧 Configuration avancée
 
-### Étape 1: Préparer le package
+### Changer le modèle Bedrock
 ```bash
-# 1. Créer un répertoire pour le package
-mkdir -p deployment-package
-cd deployment-package
-
-# 2. Installer les dépendances
-pip install -r ../requirements-lambda.txt -t .
-
-# 3. Copier le code source
-cp -r ../src_propre/* .
-
-# 4. Créer l'archive ZIP
-zip -r ../deployment.zip .
+# Mettre à jour la stack avec un nouveau modèle
+aws cloudformation update-stack \
+  --stack-name invoice-extractor \
+  --template-body file://cloudformation-template-final.yaml \
+  --parameters \
+    ParameterKey=EnvironmentName,ParameterValue=prod \
+    ParameterKey=BedrockModelId,ParameterValue=anthropic.claude-3-5-sonnet-20241022-v2:0 \
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+  --region us-west-2
 ```
 
-### Étape 2: Créer les ressources AWS
+### Modèles supportés
+- `meta.llama3-1-70b-instruct-v1:0` (recommandé, pas d'activation)
+- `anthropic.claude-3-5-sonnet-20241022-v2:0`
+- `anthropic.claude-3-haiku-20240307-v1:0`
+- `amazon.titan-text-express-v1`
 
-#### 1. Créer le rôle IAM
+### Augmenter les ressources Lambda
+Modifier le template CloudFormation :
+```yaml
+InvoiceExtractorLambda:
+  Type: AWS::Lambda::Function
+  Properties:
+    MemorySize: 2048  # Augmenter la mémoire (MB)
+    Timeout: 300      # Augmenter le timeout (secondes)
+```
+
+## 🐛 Dépannage
+
+### Erreurs courantes
+
+#### 1. "Model access not granted"
 ```bash
-# Créer le rôle
-aws iam create-role \
-  --role-name InvoiceExtractorRole \
-  --assume-role-policy-document '{
+# Solution 1 : Utiliser Llama 3.1 (pas d'activation requise)
+# Solution 2 : Activer le modèle dans la console AWS Bedrock
+```
+
+#### 2. "User is not authorized to perform: dynamodb:DescribeTable"
+```bash
+# Ajouter la permission manuellement
+aws iam put-role-policy \
+  --role-name invoice-extractor-LambdaExecutionRole-* \
+  --policy-name DynamoDBDescribeTable \
+  --policy-document '{
     "Version": "2012-10-17",
     "Statement": [{
       "Effect": "Allow",
-      "Principal": {"Service": "lambda.amazonaws.com"},
-      "Action": "sts:AssumeRole"
+      "Action": "dynamodb:DescribeTable",
+      "Resource": "arn:aws:dynamodb:us-west-2:*:table/invoices-extractor"
     }]
-  }'
-
-# Attacher les politiques
-aws iam attach-role-policy \
-  --role-name InvoiceExtractorRole \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-
-aws iam attach-role-policy \
-  --role-name InvoiceExtractorRole \
-  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
-
-aws iam attach-role-policy \
-  --role-name InvoiceExtractorRole \
-  --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
-
-aws iam attach-role-policy \
-  --role-name InvoiceExtractorRole \
-  --policy-arn arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+  }' \
+  --region us-west-2
 ```
 
-#### 2. Créer la fonction Lambda
+#### 3. Lambda ne s'exécute pas sur upload S3
 ```bash
-aws lambda create-function \
-  --function-name invoice-extractor \
-  --runtime python3.9 \
-  --handler main.lambda_handler \
-  --role arn:aws:iam::ACCOUNT-ID:role/InvoiceExtractorRole \
-  --zip-file fileb://deployment.zip \
-  --timeout 300 \
-  --memory-size 1024 \
-  --environment "Variables={ \
-    AWS_REGION=us-west-2, \
-    BEDROCK_MODEL_ID=meta.llama3-1-70b-instruct-v1:0, \
-    DYNAMODB_TABLE_NAME=invoices, \
-    LOG_LEVEL=INFO \
-  }"
-```
+# Vérifier la configuration des notifications
+aws s3api get-bucket-notification-configuration \
+  --bucket invoice-extractor-bucket-* \
+  --region us-west-2
 
-#### 3. Créer le bucket S3
-```bash
-# Créer le bucket
-BUCKET_NAME="invoice-extractor-bucket-$(date +%s)"
-aws s3 mb s3://$BUCKET_NAME --region us-west-2
-
-# Configurer les notifications
+# Reconfigurer si nécessaire
 aws s3api put-bucket-notification-configuration \
-  --bucket $BUCKET_NAME \
+  --bucket invoice-extractor-bucket-* \
   --notification-configuration '{
-    "LambdaFunctionConfigurations": [
-      {
-        "LambdaFunctionArn": "arn:aws:lambda:us-west-2:ACCOUNT-ID:function:invoice-extractor",
-        "Events": ["s3:ObjectCreated:*"],
-        "Filter": {
-          "Key": {
-            "FilterRules": [
-              {"Name": "suffix", "Value": ".pdf"}
-            ]
-          }
-        }
+    "LambdaFunctionConfigurations": [{
+      "LambdaFunctionArn": "arn:aws:lambda:us-west-2:*:function:invoice-extractor-prod",
+      "Events": ["s3:ObjectCreated:*"],
+      "Filter": {
+        "Key": {"FilterRules": [{"Name": "suffix", "Value": ".pdf"}]}
       }
-    ]
-  }'
-```
-
-#### 4. Donner l'accès S3 à Lambda
-```bash
-aws lambda add-permission \
-  --function-name invoice-extractor \
-  --statement-id s3-invoke \
-  --action lambda:InvokeFunction \
-  --principal s3.amazonaws.com \
-  --source-arn arn:aws:s3:::$BUCKET_NAME
-```
-
-## ✅ Post-déploiement
-
-### Vérification
-```bash
-# 1. Vérifier la fonction Lambda
-aws lambda get-function --function-name invoice-extractor
-
-# 2. Vérifier la table DynamoDB
-aws dynamodb describe-table --table-name invoices
-
-# 3. Vérifier le bucket S3
-aws s3 ls s3://$BUCKET_NAME/
-
-# 4. Tester avec un fichier
-aws s3 cp test_factures/facture.pdf s3://$BUCKET_NAME/incoming/
+    }]
+  }' \
+  --region us-west-2
 ```
 
 ### Monitoring
-```bash
-# Voir les logs en temps réel
-aws logs tail /aws/lambda/invoice-extractor --follow
 
-# Voir les métriques CloudWatch
+#### Logs CloudWatch
+```bash
+# Suivre les logs en temps réel
+aws logs tail /aws/lambda/invoice-extractor-prod --follow
+
+# Voir les erreurs récentes
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/invoice-extractor-prod \
+  --filter-pattern "ERROR" \
+  --limit 10
+```
+
+#### Métriques Lambda
+```bash
+# Voir les métriques
 aws cloudwatch get-metric-statistics \
   --namespace AWS/Lambda \
-  --metric-name Duration \
-  --dimensions Name=FunctionName,Value=invoice-extractor \
-  --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
-  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --metric-name Invocations \
+  --dimensions Name=FunctionName,Value=invoice-extractor-prod \
+  --start-time $(date -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date +%Y-%m-%dT%H:%M:%SZ) \
   --period 300 \
-  --statistics Average
+  --statistics Sum
 ```
 
 ## 🔄 Mise à jour
 
-### Mise à jour avec CloudFormation
+### Mettre à jour le code
 ```bash
-# Utiliser le script
-python deploy_with_cloudformation.py
-# Choisir l'option 3 (Mettre à jour la stack)
+# Recréer le package
+python deploy.py
 
-# Ou manuellement
+# Ou mettre à jour manuellement
+aws lambda update-function-code \
+  --function-name invoice-extractor-prod \
+  --zip-file fileb://invoice-extractor-lambda.zip \
+  --region us-west-2
+```
+
+### Mettre à jour la configuration
+```bash
+# Mettre à jour la stack
 aws cloudformation update-stack \
-  --stack-name invoice-extractor-stack \
-  --template-body file://cloudformation-template.yaml \
+  --stack-name invoice-extractor \
+  --template-body file://cloudformation-template-final.yaml \
   --parameters \
     ParameterKey=EnvironmentName,ParameterValue=prod \
-    ParameterKey=BucketName,UsePreviousValue=true \
-    ParameterKey=TableName,ParameterValue=invoices \
     ParameterKey=BedrockModelId,ParameterValue=meta.llama3-1-70b-instruct-v1:0 \
-  --capabilities CAPABILITY_IAM
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+  --region us-west-2
 ```
 
-### Mise à jour avec SAM
+## 🧹 Nettoyage
+
+### Supprimer toutes les ressources
 ```bash
-sam build
-sam deploy
+# Supprimer la stack CloudFormation
+aws cloudformation delete-stack \
+  --stack-name invoice-extractor \
+  --region us-west-2
+
+# Attendre la suppression
+aws cloudformation wait stack-delete-complete \
+  --stack-name invoice-extractor \
+  --region us-west-2
+
+# Supprimer manuellement les buckets S3 (si nécessaire)
+aws s3 rb s3://invoice-extractor-bucket-* --force
+aws s3 rb s3://invoice-extractor-deployment-bucket-* --force
 ```
 
-### Mise à jour manuelle
-```bash
-# 1. Recréer le package
-./scripts/build-package.sh
+### Script de nettoyage
+```powershell
+# Sous Windows
+powershell ./cleanup-aws-simple.ps1
 
-# 2. Mettre à jour la fonction Lambda
-aws lambda update-function-code \
-  --function-name invoice-extractor \
-  --zip-file fileb://deployment.zip
+# Sous Linux/Mac
+./cleanup-aws.sh
 ```
-
-## 🔍 Dépannage
-
-### Problème : "sam build échoue avec Python 3.14"
-**Solution** :
-```bash
-# Utiliser CloudFormation direct
-python deploy_with_cloudformation.py
-
-# Ou utiliser Python 3.12
-python3.12 -m venv venv
-venv\Scripts\activate
-pip install aws-sam-cli
-sam build
-```
-
-### Problème : "Lambda timeout"
-**Solution** :
-```bash
-# Augmenter le timeout
-aws lambda update-function-configuration \
-  --function-name invoice-extractor \
-  --timeout 600  # 10 minutes
-
-# Augmenter la mémoire
-aws lambda update-function-configuration \
-  --function-name invoice-extractor \
-  --memory-size 2048  # 2GB
-```
-
-### Problème : "S3 trigger not working"
-**Solution** :
-```bash
-# Vérifier les permissions
-aws lambda get-policy --function-name invoice-extractor
-
-# Réattacher la permission
-aws lambda remove-permission \
-  --function-name invoice-extractor \
-  --statement-id s3-invoke
-
-aws lambda add-permission \
-  --function-name invoice-extractor \
-  --statement-id s3-invoke \
-  --action lambda:InvokeFunction \
-  --principal s3.amazonaws.com \
-  --source-arn arn:aws:s3:::$BUCKET_NAME
-```
-
-### Problème : "Bedrock access denied"
-**Solution** :
-1. Aller dans AWS Console → Bedrock → Model access
-2. Demander l'accès au modèle souhaité
-3. Attendre l'approbation (quelques minutes à heures)
-
-## 📊 Coûts estimés
-
-### Coûts mensuels (1000 factures)
-| Service | Coût estimé | Facteur de coût |
-|---------|-------------|-----------------|
-| **AWS Bedrock** | $2-5 | $0.00105/token (Llama 3.1 70B) |
-| **AWS Lambda** | $0.20 | 300s × 1024MB × 1000 invocations |
-| **Amazon S3** | $0.50 | 1000 fichiers × 200KB × 30 jours |
-| **DynamoDB** | $1-2 | 5 RCU/WCU provisionnés |
-| **CloudWatch** | $0.50 | Logs et métriques |
-| **Total** | **$4-8/mois** | |
-
-### Optimisation des coûts
-1. **Utiliser Claude 3 Haiku** : ~75% moins cher que Sonnet
-2. **Limiter les tokens** : Configurer `BEDROCK_MAX_TOKENS=500`
-3. **DynamoDB On-Demand** : Pour un trafic variable
-4. **S3 Lifecycle** : Archiver les anciennes factures après 30 jours
-
-## 🎯 Bonnes pratiques
-
-### Sécurité
-1. **Utiliser des rôles IAM** avec le principe de moindre privilège
-2. **Chiffrer les données** S3 et DynamoDB
-3. **Utiliser VPC** pour l'isolation réseau
-4. **Auditer les logs** CloudTrail régulièrement
-
-### Performance
-1. **Augmenter la mémoire Lambda** pour les PDF complexes
-2. **Utiliser des indexes DynamoDB** pour les requêtes fréquentes
-3. **Configurer S3 multipart upload** pour les gros fichiers
-
-### Maintenance
-1. **Mettre à jour régulièrement** les dépendances
-2. **Monitorer les coûts** avec AWS Cost Explorer
-3. **Configurer des sauvegardes** DynamoDB
-4. **Documenter les changements** dans CHANGELOG.md
 
 ## 📞 Support
 
-### Ressources
-- **Documentation AWS** : https://docs.aws.amazon.com/
-- **Forum AWS** : https://repost.aws/
-- **GitHub Issues** : https://github.com/votre-repo/issues
+### En cas de problème
+1. **Vérifier les logs CloudWatch**
+2. **Tester avec un modèle différent** (Llama 3.1 recommandé)
+3. **Vérifier les permissions IAM**
+4. **Consulter la documentation AWS**
 
-### Escalation
-1. **Vérifier les logs** CloudWatch
-2. **Tester localement** avec `test_models_simple.py`
-3. **Consulter** la documentation de dépannage
-4. **Ouvrir un ticket** AWS Support si nécessaire
+### Ressources utiles
+- [Console AWS CloudFormation](https://us-west-2.console.aws.amazon.com/cloudformation)
+- [Console AWS Lambda](https://us-west-2.console.aws.amazon.com/lambda)
+- [Console AWS Bedrock](https://us-west-2.console.aws.amazon.com/bedrock)
+- [Documentation AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/)
 
 ---
 
-**Dernière mise à jour** : Janvier 2026  
-**Version du guide** : 2.0.1  
-**Environnements supportés** : AWS us-west-2, Python 3.8+  
-**Compatibilité SAM** : ⚠️ Nécessite Python ≤3.13  
-**Option recommandée** : ✅ CloudFormation direct  
-**Statut** : Production Ready ✅
+**Note** : Ce déploiement utilise la région `us-west-2` par défaut.  
+Pour utiliser une autre région, modifiez le template CloudFormation et les commandes AWS CLI.
