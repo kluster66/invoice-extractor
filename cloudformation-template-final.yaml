@@ -22,14 +22,34 @@ Parameters:
     Description: ID du modèle Bedrock à utiliser
     Default: meta.llama3-1-70b-instruct-v1:0
 
+  LambdaCodeBucket:
+    Type: String
+    Description: Nom du bucket S3 contenant le code Lambda
+
+  LambdaCodeKey:
+    Type: String
+    Description: Clé (chemin) du fichier ZIP du code Lambda
+
 Resources:
   # S3 Bucket pour les factures
   InvoiceInputBucket:
     Type: AWS::S3::Bucket
+    DependsOn:
+      - InvoiceExtractorLambda
+      - LambdaInvokePermission
     Properties:
       BucketName: !Ref BucketName
       VersioningConfiguration:
         Status: Enabled
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .pdf
+            Function: !GetAtt InvoiceExtractorLambda.Arn
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
@@ -147,8 +167,8 @@ Resources:
       Handler: main.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
-        S3Bucket: !Sub invoice-extractor-deployment-bucket-${AWS::AccountId}
-        S3Key: invoice-extractor-lambda.zip
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
       Timeout: 300
       MemorySize: 1024
       Environment:
@@ -173,23 +193,7 @@ Resources:
       Principal: s3.amazonaws.com
       SourceArn: !Sub arn:aws:s3:::${BucketName}
 
-  # Configuration de notification S3
-  S3NotificationConfiguration:
-    Type: AWS::S3::Bucket
-    DependsOn:
-      - InvoiceExtractorLambda
-      - LambdaInvokePermission
-    Properties:
-      BucketName: !Ref BucketName
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: suffix
-                    Value: .pdf
-            Function: !GetAtt InvoiceExtractorLambda.Arn
+
 
   # CloudWatch Log Group pour Lambda
   LambdaLogGroup:
@@ -197,19 +201,6 @@ Resources:
     Properties:
       LogGroupName: !Sub /aws/lambda/invoice-extractor-${EnvironmentName}
       RetentionInDays: 30
-
-  # Bucket S3 pour le code de déploiement
-  DeploymentBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub invoice-extractor-deployment-bucket-${AWS::AccountId}
-      VersioningConfiguration:
-        Status: Enabled
-      Tags:
-        - Key: Environment
-          Value: !Ref EnvironmentName
-        - Key: Application
-          Value: invoice-extractor
 
 Outputs:
   BucketName:
@@ -243,10 +234,6 @@ Outputs:
   S3ConsoleUrl:
     Description: URL de la console S3
     Value: !Sub https://s3.console.aws.amazon.com/s3/buckets/${BucketName}
-  
-  DeploymentBucketName:
-    Description: Nom du bucket de déploiement
-    Value: !Ref DeploymentBucket
   
   CloudWatchLogsUrl:
     Description: URL des logs CloudWatch

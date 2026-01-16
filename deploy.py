@@ -12,7 +12,10 @@ import zipfile
 import shutil
 from pathlib import Path
 
-def run_command(command, description=None):
+# Region par défaut
+AWS_REGION = "us-west-2"
+
+def run_command(command, description=None, ignore_errors=False):
     """Exécute une commande shell et retourne le résultat."""
     if description:
         print(f"\n{description}...")
@@ -28,9 +31,10 @@ def run_command(command, description=None):
         )
         
         if result.returncode != 0:
-            print(f"ERREUR: Commande échouée: {command}")
-            if result.stderr:
-                print(f"Details: {result.stderr[:500]}")
+            if not ignore_errors:
+                print(f"ERREUR: Commande échouée: {command}")
+                if result.stderr:
+                    print(f"Details: {result.stderr[:500]}")
             return False, result.stderr
         
         return True, result.stdout
@@ -40,26 +44,25 @@ def run_command(command, description=None):
         return False, str(e)
 
 def check_aws_cli():
-    """Vérifie que AWS CLI est configuré."""
+    """Vérifie que AWS CLI est configuré et retourne l'Account ID."""
     print("Verification de la configuration AWS...")
     
     success, output = run_command("aws sts get-caller-identity")
     if not success:
         print("ERREUR: AWS CLI n'est pas configuré ou les credentials sont invalides.")
         print("CONSEIL: Exécutez 'aws configure' pour configurer vos credentials.")
-        return False
+        return None
     
     # Extraire l'ID du compte
     try:
         identity = json.loads(output)
-        account_id = identity.get('Account', 'N/A')
+        account_id = identity.get('Account')
         user_arn = identity.get('Arn', 'N/A')
         print(f"OK: AWS CLI configuré - Compte: {account_id}")
-        print(f"   Utilisateur: {user_arn}")
-        return True
+        return account_id
     except:
-        print("OK: AWS CLI configuré")
-        return True
+        print("ERREUR: Impossible de parser l'identité AWS")
+        return None
 
 def validate_template():
     """Valide le template CloudFormation."""
@@ -71,7 +74,7 @@ def validate_template():
         return False
     
     success, output = run_command(
-        f"aws cloudformation validate-template --template-body file://{template_path} --region us-west-2"
+        f"aws cloudformation validate-template --template-body file://{template_path} --region {AWS_REGION}"
     )
     
     if success:
@@ -126,7 +129,7 @@ def create_minimal_lambda_package():
         print("Installation des dépendances...")
         for dep in dependencies:
             success, output = run_command(
-                f"pip install {dep} --target {package_dir} --no-deps"
+                f"python -m pip install {dep} --target {package_dir} --no-deps"
             )
             if success:
                 print(f"  Installé: {dep}")
@@ -155,12 +158,46 @@ def create_minimal_lambda_package():
         print(f"ERREUR lors de la création du package: {e}")
         return False, None
 
+def ensure_s3_bucket(bucket_name):
+    """Vérifie l'existence du bucket ou le crée s'il n'existe pas."""
+    print(f"\nVérification du bucket de déploiement: {bucket_name}...")
+    
+    # Vérifier si le bucket existe
+    success, output = run_command(f"aws s3api head-bucket --bucket {bucket_name}")
+    
+    if success:
+        print(f"OK: Le bucket {bucket_name} existe déjà")
+        return True
+    
+    # Si échec, vérifier si c'est parce qu'il n'existe pas (404) ou accès interdit (403)
+    if "403" in output:
+        print(f"ERREUR: Le bucket {bucket_name} existe mais vous n'avez pas les droits ou il appartient à un autre compte.")
+        return False
+        
+    # Créer le bucket
+    print(f"Création du bucket {bucket_name}...")
+    if AWS_REGION == "us-east-1":
+        cmd = f"aws s3 mb s3://{bucket_name}"
+    else:
+        cmd = f"aws s3 mb s3://{bucket_name} --region {AWS_REGION}"
+        
+    success, output = run_command(cmd)
+    
+    if success:
+        print("OK: Bucket créé avec succès")
+        # Activer le versioning pour sécurité
+        run_command(f"aws s3api put-bucket-versioning --bucket {bucket_name} --versioning-configuration Status=Enabled")
+        return True
+    else:
+        print(f"ERREUR: Impossible de créer le bucket: {output}")
+        return False
+
 def upload_to_s3(bucket_name, zip_path):
     """Upload le package Lambda vers S3."""
     print(f"\nUpload du package Lambda vers S3: {bucket_name}...")
     
     success, output = run_command(
-        f"aws s3 cp {zip_path} s3://{bucket_name}/invoice-extractor-lambda.zip --region us-west-2"
+        f"aws s3 cp {zip_path} s3://{bucket_name}/invoice-extractor-lambda.zip --region {AWS_REGION}"
     )
     
     if success:
@@ -170,7 +207,7 @@ def upload_to_s3(bucket_name, zip_path):
         print("ERREUR: Echec de l'upload vers S3")
         return False
 
-def deploy_cloudformation_stack():
+def deploy_cloudformation_stack(lambda_code_bucket, lambda_code_key):
     """Déploie la stack CloudFormation."""
     print("\nDeploiement de la stack CloudFormation...")
     
@@ -179,28 +216,83 @@ def deploy_cloudformation_stack():
     
     # Vérifier si la stack existe déjà
     success, output = run_command(
-        f"aws cloudformation describe-stacks --stack-name {stack_name} --region us-west-2"
+        f"aws cloudformation describe-stacks --stack-name {stack_name} --region {AWS_REGION} --output json",
+        ignore_errors=True
     )
     
+    command = "create-stack"
+    action = "création"
+    
     if success:
-        # Stack existe, demander confirmation pour mise à jour
-        print(f"ATTENTION: La stack '{stack_name}' existe déjà.")
-        response = input("Voulez-vous la mettre à jour? (oui/non): ")
-        
-        if response.lower() != 'oui':
-            print("ANNULATION: Déploiement annulé")
+        try:
+            stack_info = json.loads(output)
+            status = stack_info['Stacks'][0]['StackStatus']
+            print(f"Statut actuel de la stack: {status}")
+            
+            if status == 'ROLLBACK_COMPLETE':
+                print("ATTENTION: La stack est en état ROLLBACK_COMPLETE (probablement suite à un échec de création).")
+                print("Elle doit être supprimée avant de pouvoir être recréée.")
+                response = input("Voulez-vous supprimer la stack existante? (oui/non): ")
+                
+                if response.lower() == 'oui':
+                    print("Suppression de la stack...")
+                    run_command(f"aws cloudformation delete-stack --stack-name {stack_name} --region {AWS_REGION}")
+                    print("Attente de la suppression (cela peut prendre 1-2 minutes)...")
+                    run_command(f"aws cloudformation wait stack-delete-complete --stack-name {stack_name} --region {AWS_REGION}")
+                    print("Stack supprimée.")
+                    # On continue avec create-stack
+                else:
+                    print("ANNULATION: Impossible de procéder sans supprimer la stack corrompue.")
+                    return False
+            
+            elif status in ['CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE']:
+                # Stack exists and is healthy-ish, ask for update
+                print(f"ATTENTION: La stack '{stack_name}' existe déjà.")
+                response = input("Voulez-vous la mettre à jour? (oui/non): ")
+                
+                if response.lower() != 'oui':
+                    print("ANNULATION: Déploiement annulé")
+                    return False
+                
+                command = "update-stack"
+                action = "mise à jour"
+            else:
+                 print(f"ATTENTION: La stack est dans un état inattendu: {status}")
+                 response = input("Voulez-vous essayer de la mettre à jour quand même? (oui/non): ")
+                 if response.lower() == 'oui':
+                     command = "update-stack"
+                     action = "mise à jour"
+                 else:
+                     return False
+                     
+        except Exception as e:
+            print(f"ERREUR lors de la lecture du statut de la stack: {e}")
+            # On assume qu'on peut update ou create? Safer to stop.
             return False
-        
-        command = "update-stack"
-        action = "mise à jour"
-    else:
-        command = "create-stack"
-        action = "création"
     
     # Paramètres pour la stack
+    # Générer un nom de bucket unique pour les inputs
+    account_id = lambda_code_bucket.split('-')[-2] # Hacky retrieval from the deploy bucket name which includes ID
+    # Better: we passed account_id to main, maybe we should pass it here or just regenerate it. 
+    # Let's simple check aws cli again or make it global/arg. 
+    # To keep it simple, let's use the one from deploy bucket if possible or just rely on a unique name generation.
+    
+    import random
+    import string
+    
+    # We will generate a suffix or use account ID if we can get it easily. 
+    # Getting Account ID again to be safe.
+    success_id, output_id = run_command("aws sts get-caller-identity --query Account --output text")
+    current_account_id = output_id.strip() if success_id else "unknown"
+    
+    input_bucket_name = f"invoice-input-{current_account_id}-{AWS_REGION}"
+    
     parameters = [
         "ParameterKey=EnvironmentName,ParameterValue=prod",
-        "ParameterKey=BedrockModelId,ParameterValue=meta.llama3-1-70b-instruct-v1:0"
+        "ParameterKey=BedrockModelId,ParameterValue=meta.llama3-1-70b-instruct-v1:0",
+        f"ParameterKey=LambdaCodeBucket,ParameterValue={lambda_code_bucket}",
+        f"ParameterKey=LambdaCodeKey,ParameterValue={lambda_code_key}",
+        f"ParameterKey=BucketName,ParameterValue={input_bucket_name}"
     ]
     
     # Construire la commande
@@ -209,13 +301,17 @@ def deploy_cloudformation_stack():
           f"--template-body file://{template_path} " \
           f"--parameters {' '.join(parameters)} " \
           f"--capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM " \
-          f"--region us-west-2"
+          f"--region {AWS_REGION}"
     
     print(f"\n{action.capitalize()} de la stack '{stack_name}'...")
+    print(f"Bucket de données: {input_bucket_name}")
     success, output = run_command(cmd)
     
     if not success:
         print(f"ERREUR: Echec de la {action} de la stack")
+        if "No updates are to be performed" in output:
+            print("INFO: Aucune modification détectée.")
+            return True
         return False
     
     print(f"OK: Commande de {action} envoyée avec succès")
@@ -223,8 +319,8 @@ def deploy_cloudformation_stack():
     # Attendre la complétion
     print(f"\nAttente de la {action} de la stack (cela peut prendre 2-3 minutes)...")
     
-    wait_cmd = f"aws cloudformation wait stack-{command.replace('stack', '')}-complete " \
-               f"--stack-name {stack_name} --region us-west-2"
+    wait_cmd = f"aws cloudformation wait stack-{command.replace('stack', '')}complete " \
+               f"--stack-name {stack_name} --region {AWS_REGION}"
     
     success, output = run_command(wait_cmd)
     
@@ -232,9 +328,25 @@ def deploy_cloudformation_stack():
         print(f"OK: Stack {action}ée avec succès")
         return True
     else:
-        print(f"ATTENTION: La {action} de la stack a pris trop de temps ou a échoué")
-        print("CONSEIL: Vérifiez l'état dans la console CloudFormation")
-        return True  # Retourner True quand même pour afficher les outputs
+        print(f"ERREUR: La {action} de la stack a échoué")
+        print("Analyse des erreurs...")
+        
+        # Récupérer les événements d'erreur
+        events_cmd = f"aws cloudformation describe-stack-events --stack-name {stack_name} --region {AWS_REGION} " \
+                     f"--query \"StackEvents[?ResourceStatus=='CREATE_FAILED' || ResourceStatus=='UPDATE_FAILED'].{{Resource:LogicalResourceId, Reason:ResourceStatusReason}}\" " \
+                     f"--output json"
+        
+        success_evt, output_evt = run_command(events_cmd)
+        if success_evt:
+            try:
+                events = json.loads(output_evt)
+                print("\nRAISONS DE L'ECHEC:")
+                for evt in events:
+                    print(f"- {evt.get('Resource')}: {evt.get('Reason')}")
+            except:
+                print(f"Raw error output: {output_evt}")
+        
+        return False
 
 def get_stack_outputs():
     """Récupère les outputs de la stack CloudFormation."""
@@ -243,26 +355,31 @@ def get_stack_outputs():
     stack_name = "invoice-extractor"
     
     success, output = run_command(
-        f"aws cloudformation describe-stacks --stack-name {stack_name} --region us-west-2 "
-        f"--query 'Stacks[0].Outputs' --output json"
+        f"aws cloudformation describe-stacks --stack-name {stack_name} --region {AWS_REGION} "
+        f"--query \"Stacks[0].Outputs\" --output json"
     )
     
-    if success and output.strip():
+    if success and output and output.strip() and output.strip() != 'null':
         try:
             outputs = json.loads(output)
+            if not outputs:
+                print("INFO: Aucun output trouvé (possible échec précédent)")
+                return False
+                
             print("\n" + "=" * 60)
             print("DEPLOIEMENT REUSSI !")
             print("=" * 60)
             
             for item in outputs:
-                key = item.get('OutputKey', 'N/A')
-                value = item.get('OutputValue', 'N/A')
-                description = item.get('Description', '')
-                
-                print(f"\n{key}:")
-                print(f"  {value}")
-                if description:
-                    print(f"  {description}")
+                if isinstance(item, dict):
+                    key = item.get('OutputKey', 'N/A')
+                    value = item.get('OutputValue', 'N/A')
+                    description = item.get('Description', '')
+                    
+                    print(f"\n{key}:")
+                    print(f"  {value}")
+                    if description:
+                        print(f"  {description}")
             
             print("\n" + "=" * 60)
             
@@ -276,11 +393,14 @@ def get_stack_outputs():
             return True
             
         except json.JSONDecodeError:
-            print("ATTENTION: Impossible de parser les outputs JSON")
-            return True
+            print(f"ATTENTION: Impossible de parser les outputs JSON: {output[:100]}...")
+            return False
+        except Exception as e:
+            print(f"ATTENTION: Erreur lors de l'affichage des outputs: {e}")
+            return False
     else:
         print("INFO: Aucun output trouvé pour la stack")
-        return True
+        return False
 
 def test_deployment():
     """Teste le déploiement en uploadant un fichier de test."""
@@ -288,8 +408,8 @@ def test_deployment():
     
     # Récupérer le nom du bucket depuis les outputs
     success, output = run_command(
-        "aws cloudformation describe-stacks --stack-name invoice-extractor --region us-west-2 "
-        "--query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' --output text"
+        f"aws cloudformation describe-stacks --stack-name invoice-extractor --region {AWS_REGION} "
+        "--query \"Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue\" --output text"
     )
     
     if success and output.strip():
@@ -306,7 +426,7 @@ def test_deployment():
                 print(f"\nUpload du fichier de test vers S3...")
                 
                 success, upload_output = run_command(
-                    f'aws s3 cp "{test_file}" s3://{bucket_name}/ --region us-west-2'
+                    f'aws s3 cp "{test_file}" s3://{bucket_name}/ --region {AWS_REGION}'
                 )
                 
                 if success:
@@ -349,7 +469,8 @@ def main():
     try:
         # 1. Vérifier AWS CLI
         print("\n1. Verification des prérequis...")
-        if not check_aws_cli():
+        account_id = check_aws_cli()
+        if not account_id:
             return 1
         
         # 2. Valider le template
@@ -363,28 +484,39 @@ def main():
         if not success:
             return 1
         
-        # 4. Uploader vers S3 (bucket temporaire pour le déploiement)
-        print("\n4. Upload du code vers S3...")
+        # 4. Gérer le bucket de déploiement et uploader
+        print("\n4. Gestion des artifacts de déploiement...")
         
-        # Créer un bucket temporaire pour le déploiement
-        import uuid
-        temp_bucket = f"invoice-extractor-deploy-{uuid.uuid4().hex[:8]}"
+        # Définir un nom de bucket stable basé sur l'Account ID
+        deploy_bucket = f"invoice-extractor-deploy-{account_id}-{AWS_REGION}"
         
-        success, output = run_command(
-            f"aws s3 mb s3://{temp_bucket} --region us-west-2"
-        )
+        if not ensure_s3_bucket(deploy_bucket):
+            print("ATTENTION: Impossible d'utiliser le bucket automatique.")
+            deploy_bucket = input("Entrez le nom d'un bucket S3 existant pour le code: ")
         
-        if not success:
-            print("ATTENTION: Impossible de créer le bucket temporaire")
-            print("CONSEIL: Utilisez un bucket existant ou créez-en un manuellement")
-            temp_bucket = input("Entrez le nom d'un bucket S3 existant: ")
-        
-        if not upload_to_s3(temp_bucket, zip_path):
+        if not upload_to_s3(deploy_bucket, zip_path):
             return 1
-        
+            
         # 5. Déployer la stack CloudFormation
         print("\n5. Deploiement de l'infrastructure...")
-        if not deploy_cloudformation_stack():
+        
+        # Generer une clé unique avec timestamp pour forcer la mise à jour Lambda
+        import time
+        timestamp = int(time.time())
+        zip_key = f"invoice-extractor-lambda-{timestamp}.zip"
+        
+        # Upload avec le nom unique
+        print(f"Upload vers S3 avec la clé: {zip_key}")
+        upload_success, _ = run_command(
+            f"aws s3 cp {zip_path} s3://{deploy_bucket}/{zip_key} --region {AWS_REGION}"
+        )
+        
+        if not upload_success:
+            print("ERREUR: Echec de l'upload vers S3")
+            return 1
+            
+        # On passe maintenant les infos du bucket de code
+        if not deploy_cloudformation_stack(deploy_bucket, zip_key):
             return 1
         
         # 6. Afficher les résultats
@@ -396,6 +528,8 @@ def main():
         
         # 8. Tester (optionnel)
         print("\n7. Test du déploiement...")
+        # On ne demande que si on est en mode interactif (input)
+        # Mais ici on garde le comportement original
         response = input("Voulez-vous tester avec un fichier de test? (oui/non): ")
         if response.lower() == 'oui':
             test_deployment()

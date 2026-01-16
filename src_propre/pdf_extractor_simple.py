@@ -8,7 +8,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-class PDFExtractor:
+class PDFExtractorSimple:
     """Classe pour extraire le texte des fichiers PDF (version simplifiée)"""
     
     def __init__(self):

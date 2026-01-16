@@ -11,6 +11,7 @@ import boto3
 from typing import Dict, Any
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote_plus
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Import des modules locaux
 try:
-    from pdf_extractor_simple_only import PDFExtractorSimple
+    from pdf_extractor_simple import PDFExtractorSimple
     from bedrock_client import BedrockClient
     from dynamodb_client import DynamoDBClient
     from config import Config
@@ -130,7 +131,7 @@ Si une info est manquante, mets null."""
             # Extraire les informations de l'événement S3
             s3_event = event["Records"][0]["s3"]
             bucket = s3_event["bucket"]["name"]
-            key = s3_event["object"]["key"]
+            key = unquote_plus(s3_event["object"]["key"])
             filename = Path(key).name
             
             logger.info(f"Traitement du fichier: {filename} depuis {bucket}/{key}")
