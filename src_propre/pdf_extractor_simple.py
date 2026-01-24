@@ -23,13 +23,46 @@ class PDFExtractorSimple:
             pdf_path: Chemin vers le fichier PDF
             
         Returns:
-            Texte extrait du PDF
+            Texte extrait du PDF (nettoyé et normalisé)
         """
         try:
-            return self._extract_with_pypdf2(pdf_path)
+            raw_text = self._extract_with_pypdf2(pdf_path)
+            cleaned_text = self._clean_extracted_text(raw_text)
+            return cleaned_text
         except Exception as e:
             logger.error(f"Erreur lors de l'extraction PDF: {str(e)}")
             raise
+    
+    def _clean_extracted_text(self, text: str) -> str:
+        """
+        Nettoie et normalise le texte extrait du PDF
+        
+        Args:
+            text: Texte brut extrait
+            
+        Returns:
+            Texte nettoyé et normalisé
+        """
+        import re
+        
+        # Supprimer les caractères de contrôle (sauf \n et \t)
+        text = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+        
+        # Normaliser les espaces multiples en un seul espace
+        text = re.sub(r' +', ' ', text)
+        
+        # Normaliser les sauts de ligne multiples (max 2)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        
+        # Supprimer les espaces en début et fin de ligne
+        lines = [line.strip() for line in text.split('\n')]
+        text = '\n'.join(lines)
+        
+        # Supprimer les lignes vides en début et fin
+        text = text.strip()
+        
+        logger.info(f"Texte nettoyé: {len(text)} caractères")
+        return text
     
     def _extract_with_pypdf2(self, pdf_path: str) -> str:
         """

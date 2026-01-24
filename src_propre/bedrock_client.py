@@ -234,23 +234,23 @@ class BedrockClient:
     
     def _normalize_field_names(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Normalise les noms de champs pour correspondre au format attendu
+        Normalise les noms de champs pour correspondre au schéma n8n
         
         Args:
             data: Données avec des noms de champs variés
             
         Returns:
-            Données avec des noms de champs normalisés
+            Données avec des noms de champs normalisés (schéma n8n)
         """
+        # Mapping simplifié vers le schéma n8n exact
         field_mappings = {
-            # Mappings pour les champs français
-            "fournisseur": ["fournisseur", "supplier", "vendor", "vendeur", "provider"],
-            "montant_ht": ["montant_ht", "montant", "amount", "total", "montant_total", "montant_ht", "price", "cost"],
-            "numero_facture": ["numero_facture", "numero", "num_facture", "invoice_number", "facture_numero", "invoice_no", "bill_number"],
-            "date_facture": ["date_facture", "date", "invoice_date", "facture_date", "bill_date", "date_facturation"],
-            "Le numero Chrono du document": ["numero_chrono", "chrono", "chrono_number", "document_chrono", "chrono_no", "document_number"],
-            "La période de couverture": ["periode_couverture", "periode", "period", "couverture_periode", "coverage_period", "billing_period"],
-            "nom du fichier que tu trouves ici": ["nom_fichier", "filename", "file_name", "document_name", "file", "document"]
+            "fournisseur": ["fournisseur", "supplier", "vendor", "vendeur"],
+            "montant_ht": ["montant_ht", "montant", "amount", "total"],
+            "numero_facture": ["numero_facture", "numero", "invoice_number", "facture_numero"],
+            "date_facture": ["date_facture", "date", "invoice_date"],
+            "chrono": ["chrono", "numero_chrono", "chrono_number", "document_chrono"],
+            "couverture": ["couverture", "periode_couverture", "periode", "period", "coverage_period"],
+            "nom_fichier": ["nom_fichier", "filename", "file_name"]
         }
         
         normalized_data = {}
@@ -265,10 +265,10 @@ class BedrockClient:
                     value = data_lower[name.lower()]
                     break
             
-            # Si pas trouvé, utiliser la valeur originale ou None
+            # Si pas trouvé, mettre None
             normalized_data[standard_field] = value
         
-        # Garder les autres champs non mappés
+        # Garder les autres champs non mappés (métadonnées, etc.)
         for key, value in data.items():
             key_lower = key.lower()
             if not any(key_lower in [n.lower() for n in names] for names in field_mappings.values()):
@@ -336,6 +336,7 @@ class BedrockClient:
         Args:
             data: Données extraites
         """
+        # Champs requis selon le schéma n8n
         required_fields = [
             "fournisseur",
             "montant_ht", 
@@ -343,10 +344,11 @@ class BedrockClient:
             "date_facture"
         ]
         
+        # Champs optionnels selon le schéma n8n
         optional_fields = [
-            "Le numero Chrono du document",
-            "La période de couverture", 
-            "nom du fichier que tu trouves ici"
+            "chrono",
+            "couverture", 
+            "nom_fichier"
         ]
         
         for field in required_fields:
@@ -370,14 +372,15 @@ class BedrockClient:
         """
         logger.warning("Tentative d'extraction manuelle des données depuis la réponse texte")
         
+        # Schéma n8n avec noms de champs corrects
         extracted_data = {
             "fournisseur": None,
             "montant_ht": None,
             "numero_facture": None,
             "date_facture": None,
-            "Le numero Chrono du document": None,
-            "La période de couverture": None,
-            "nom du fichier que tu trouves ici": None
+            "chrono": None,
+            "couverture": None,
+            "nom_fichier": None
         }
         
         # Chercher des patterns spécifiques dans le texte
