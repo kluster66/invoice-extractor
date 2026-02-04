@@ -4,8 +4,8 @@ Outil serverless pour extraire automatiquement les informations structurées des
 
 ## 🚀 Fonctionnalités
 
-- **Extraction automatique** : Traitement automatique des factures PDF uploadées vers S3
-- **Multi-modèles** : Support de Claude 3, Llama 3, Amazon Titan
+- **Extraction intelligente** : Identification automatique du fournisseur avec logique de correction (évite la confusion client/fournisseur)
+- **Multi-modèles** : Support de Claude 3.5, Llama 3.1, Amazon Titan
 - **Parsing robuste** : Extraction fiable des données JSON depuis les réponses LLM
 - **Stockage structuré** : Données stockées dans DynamoDB avec indexes secondaires
 - **Monitoring complet** : Logs CloudWatch et métriques
@@ -25,9 +25,11 @@ S3 (Upload PDF) → Lambda → Bedrock (LLM) → DynamoDB (Stockage)
    - AWS Bedrock (modèles activés)
    - Lambda, S3, DynamoDB, CloudFormation
 2. **AWS CLI** configuré :
+
    ```bash
    aws configure
    ```
+
 3. **Python 3.8+** et **pip**
 
 ## 🚀 Déploiement rapide
@@ -47,6 +49,7 @@ python deploy.py
 ```
 
 Le script `deploy.py` gère automatiquement :
+
 - ✅ Validation du template CloudFormation
 - ✅ Création du package Lambda
 - ✅ Upload du code vers S3
@@ -122,12 +125,14 @@ aws dynamodb scan --table-name invoices-extractor
 ### Problèmes courants
 
 1. **"Model access not granted"**
+
    ```bash
    # Activer l'accès dans la console AWS Bedrock
    # Ou utiliser Llama 3.1 (pas d'activation requise)
    ```
 
 2. **Permissions IAM manquantes**
+
    ```bash
    # Vérifier que le rôle Lambda a les permissions :
    # - dynamodb:DescribeTable
@@ -136,6 +141,7 @@ aws dynamodb scan --table-name invoices-extractor
    ```
 
 3. **Fichier trop volumineux**
+
    ```bash
    # Augmenter la mémoire Lambda (max 10240 MB)
    # Augmenter le timeout (max 900 secondes)
@@ -156,11 +162,11 @@ invoice-extractor/
 │   ├── main.py             # Handler Lambda
 │   ├── bedrock_client.py   # Client multi-modèles
 │   ├── dynamodb_client.py  # Client DynamoDB
-│   ├── pdf_extractor.py    # Extraction PDF
+│   ├── pdf_extractor_simple.py # Extraction PDF (recommandé)
 │   └── config.py           # Configuration
 ├── cloudformation-template-final.yaml  # Template IaC
 ├── deploy.py               # Script de déploiement
-├── cleanup-aws-simple.ps1  # Nettoyage AWS
+├── cleanup.py              # Script de nettoyage AWS
 ├── requirements.txt        # Dépendances
 ├── .gitignore             # Fichiers à ignorer
 └── README.md              # Documentation
@@ -185,8 +191,8 @@ aws lambda update-function-code \
 # Supprimer la stack CloudFormation
 aws cloudformation delete-stack --stack-name invoice-extractor --region us-west-2
 
-# Ou utiliser le script PowerShell
-powershell ./cleanup-aws-simple.ps1
+# Ou utiliser le script de nettoyage
+python cleanup.py
 ```
 
 ## 📄 Licence
@@ -200,6 +206,7 @@ Les contributions sont les bienvenues ! Voir [CONTRIBUTING.md](CONTRIBUTING.md) 
 ## 📞 Support
 
 Pour les problèmes :
+
 1. Vérifier les logs CloudWatch
 2. Tester avec différents modèles Bedrock
 3. Ouvrir une issue sur GitHub

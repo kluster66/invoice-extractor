@@ -5,14 +5,17 @@ Ce document décrit la configuration de l'outil d'extraction de factures PDF.
 ## 📋 Configuration AWS
 
 ### Région AWS
+
 Par défaut : `us-west-2`
 
 Pour changer la région :
+
 1. Modifier le template CloudFormation
 2. Mettre à jour les commandes AWS CLI
 3. Ré-déployer la stack
 
 ### Services AWS utilisés
+
 - **AWS Bedrock** : Modèles LLM pour l'extraction
 - **AWS Lambda** : Traitement des factures
 - **Amazon S3** : Stockage des fichiers PDF
@@ -26,9 +29,9 @@ Pour changer la région :
 ### Variables d'environnement
 
 | Variable | Description | Valeur par défaut | Requis |
-|----------|-------------|-------------------|--------|
+| :--- | :--- | :--- | :--- |
 | `DYNAMODB_TABLE_NAME` | Nom de la table DynamoDB | `invoices-extractor` | Oui |
-| `S3_INPUT_BUCKET` | Nom du bucket S3 pour les factures | Auto-détecté | Oui |
+| `S3_INPUT_BUCKET` | Nom du bucket S3 (ex: `invoice-input-...`) | Auto-détecté | Oui |
 | `BEDROCK_MODEL_ID` | ID du modèle Bedrock à utiliser | `meta.llama3-1-70b-instruct-v1:0` | Oui |
 | `ENVIRONMENT_NAME` | Nom de l'environnement (dev, staging, prod) | `prod` | Non |
 | `LOG_LEVEL` | Niveau de logging (DEBUG, INFO, WARNING, ERROR) | `INFO` | Non |
@@ -37,21 +40,25 @@ Pour changer la région :
 ### Configuration des modèles Bedrock
 
 #### Modèles supportés
+
 ```python
 # Liste des modèles supportés (dans src_propre/config.py)
 BEDROCK_AVAILABLE_MODELS = {
-    "llama": "meta.llama3-1-70b-instruct-v1:0",
-    "claude": "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "titan": "amazon.titan-text-express-v1"
+    "llama-3-70b": "meta.llama3-70b-instruct-v1:0",
+    "claude-3-sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
+    "claude-3-haiku": "anthropic.claude-3-haiku-20240307-v1:0",
+    "titan-text-express": "amazon.titan-text-express-v1"
 }
 ```
 
 #### Activation des modèles
+
 - **Llama 3.1 70B** : Pas d'activation requise
 - **Claude 3.5 Sonnet** : Activation requise dans la console AWS Bedrock
 - **Amazon Titan** : Activation requise dans la console AWS Bedrock
 
 #### Changer de modèle
+
 ```bash
 # Via CloudFormation
 aws cloudformation update-stack \
@@ -67,6 +74,7 @@ aws lambda update-function-configuration \
 ## 🗄️ Configuration DynamoDB
 
 ### Structure de la table
+
 ```yaml
 Table: invoices-extractor
 Primary Key: invoice_id (String)
@@ -77,6 +85,7 @@ Global Secondary Indexes:
 ```
 
 ### Schéma des données
+
 ```json
 {
   "invoice_id": "uuid-v4",
@@ -100,11 +109,13 @@ Global Secondary Indexes:
 ```
 
 ### Capacités de provisionnement
+
 - **Read Capacity Units** : 5
 - **Write Capacity Units** : 5
 - **Auto-scaling** : Non configuré par défaut
 
 Pour modifier les capacités :
+
 ```yaml
 # Dans cloudformation-template-final.yaml
 InvoicesTable:
@@ -117,7 +128,8 @@ InvoicesTable:
 ## 📁 Configuration S3
 
 ### Structure du bucket
-```
+
+```text
 s3://invoice-extractor-bucket-{id}/
 ├── factures/              # Factures uploadées
 │   ├── 2024/
@@ -130,11 +142,13 @@ s3://invoice-extractor-bucket-{id}/
 ```
 
 ### Notifications S3
+
 - **Événements** : `s3:ObjectCreated:*`
 - **Filtre** : Fichiers avec extension `.pdf`
 - **Destination** : Fonction Lambda `invoice-extractor-prod`
 
 ### Configuration des notifications
+
 ```json
 {
   "LambdaFunctionConfigurations": [{
@@ -155,6 +169,7 @@ s3://invoice-extractor-bucket-{id}/
 ## ⚙️ Configuration Lambda
 
 ### Spécifications techniques
+
 - **Runtime** : Python 3.10
 - **Handler** : `main.lambda_handler`
 - **Mémoire** : 1024 MB
@@ -162,6 +177,7 @@ s3://invoice-extractor-bucket-{id}/
 - **Architecture** : x86_64
 
 ### Variables d'environnement Lambda
+
 ```bash
 # Voir les variables actuelles
 aws lambda get-function-configuration \
@@ -175,6 +191,7 @@ aws lambda update-function-configuration \
 ```
 
 ### Permissions IAM
+
 Le rôle Lambda a les permissions suivantes :
 
 ```json
@@ -232,17 +249,20 @@ Le rôle Lambda a les permissions suivantes :
 ## 🔍 Configuration du logging
 
 ### Niveaux de log
+
 - **DEBUG** : Informations détaillées pour le débogage
 - **INFO** : Informations générales sur l'exécution
 - **WARNING** : Avertissements non critiques
 - **ERROR** : Erreurs nécessitant une attention
 
 ### Configuration CloudWatch
+
 - **Groupe de logs** : `/aws/lambda/invoice-extractor-prod`
 - **Rétention** : 30 jours
 - **Format** : Texte structuré
 
 ### Exemple de logs
+
 ```json
 {
   "level": "INFO",
@@ -256,6 +276,7 @@ Le rôle Lambda a les permissions suivantes :
 ## 🎯 Configuration de l'extraction
 
 ### Prompt d'extraction
+
 ```python
 EXTRACTION_PROMPT = """
 Vous êtes un expert comptable. Extrayez les informations suivantes de la facture :
@@ -273,8 +294,9 @@ Retournez les données au format JSON.
 ```
 
 ### Champs extraits
+
 | Champ | Type | Description | Requis |
-|-------|------|-------------|--------|
+| :--- | :--- | :--- | :--- |
 | `numero_facture` | String | Numéro de la facture | Oui |
 | `date_facture` | String (YYYY-MM-DD) | Date de la facture | Oui |
 | `fournisseur` | String | Nom du fournisseur | Oui |
@@ -285,7 +307,9 @@ Retournez les données au format JSON.
 | `date_echeance` | String (YYYY-MM-DD) | Date d'échéance | Non |
 
 ### Normalisation des champs
+
 Le système normalise automatiquement les noms de champs :
+
 - `invoice_number` → `numero_facture`
 - `date` → `date_facture`
 - `supplier` → `fournisseur`
@@ -294,19 +318,22 @@ Le système normalise automatiquement les noms de champs :
 ## 🔄 Configuration du déploiement
 
 ### Template CloudFormation
+
 - **Fichier** : `cloudformation-template-final.yaml`
 - **Région** : `us-west-2`
 - **Stack** : `invoice-extractor`
 
 ### Paramètres CloudFormation
+
 | Paramètre | Description | Valeur par défaut |
-|-----------|-------------|-------------------|
+| :--- | :--- | :--- |
 | `EnvironmentName` | Nom de l'environnement | `prod` |
 | `BucketName` | Nom du bucket S3 | `invoice-input-bucket` |
 | `TableName` | Nom de la table DynamoDB | `invoices-extractor` |
 | `BedrockModelId` | ID du modèle Bedrock | `meta.llama3-1-70b-instruct-v1:0` |
 
 ### Script de déploiement
+
 ```bash
 # Script principal
 python deploy.py
@@ -315,24 +342,28 @@ python deploy.py
 # 1. Vérifie les prérequis
 # 2. Valide le template
 # 3. Crée le package Lambda
-# 4. Déploie la stack
-# 5. Configure les notifications
-# 6. Affiche les URLs
+# 4. Uploade le code vers le bucket de déploiement
+# 5. Déploie la stack CloudFormation
+# 6. Affiche les sorties (outputs) et instructions
+# 7. Propose un test avec une facture réelle
 ```
 
 ## 🛡️ Configuration de sécurité
 
 ### Chiffrement des données
+
 - **S3** : Chiffrement SSE-S3 par défaut
 - **DynamoDB** : Chiffrement au repos activé
 - **Lambda** : Variables d'environnement non chiffrées
 
 ### Contrôle d'accès
+
 - **IAM** : Politiques basées sur les rôles
 - **S3** : Accès via politiques de bucket
 - **Lambda** : Exécution via rôle IAM
 
 ### Bonnes pratiques
+
 1. **Rotation des clés** : Rotation régulière des clés AWS
 2. **Audit** : Activation de CloudTrail pour l'audit
 3. **Monitoring** : Alertes CloudWatch pour les erreurs
@@ -341,11 +372,13 @@ python deploy.py
 ## 📊 Configuration du monitoring
 
 ### Métriques CloudWatch
+
 - **Lambda** : Invocations, erreurs, durée, throttling
 - **DynamoDB** : Consommation RCU/WCU, latence
 - **S3** : Requêtes, données transférées
 
 ### Alertes recommandées
+
 ```bash
 # Créer une alerte pour les erreurs Lambda
 aws cloudwatch put-metric-alarm \
@@ -364,11 +397,13 @@ aws cloudwatch put-metric-alarm \
 ## 🔧 Personnalisation avancée
 
 ### Ajouter un nouveau champ
+
 1. Modifier le prompt dans `src_propre/bedrock_client.py`
 2. Ajouter le mapping dans `_normalize_field_names()`
 3. Mettre à jour la validation
 
 ### Changer le format de sortie
+
 ```python
 # Modifier dans src_propre/bedrock_client.py
 class BedrockClient:
@@ -379,6 +414,7 @@ class BedrockClient:
 ```
 
 ### Ajouter un prétraitement PDF
+
 ```python
 # Dans src_propre/pdf_extractor.py
 class PDFExtractor:
@@ -392,12 +428,14 @@ class PDFExtractor:
 ## 📞 Support de configuration
 
 ### Problèmes courants
+
 1. **Permissions manquantes** : Vérifier les politiques IAM
 2. **Modèle non activé** : Activer dans la console Bedrock
 3. **Timeout Lambda** : Augmenter le timeout ou la mémoire
 4. **Format PDF non supporté** : Vérifier la compatibilité PyPDF2
 
 ### Ressources
+
 - [Documentation AWS Bedrock](https://docs.aws.amazon.com/bedrock/)
 - [Guide AWS Lambda](https://docs.aws.amazon.com/lambda/)
 - [Template CloudFormation](cloudformation-template-final.yaml)

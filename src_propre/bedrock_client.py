@@ -39,10 +39,8 @@ class BedrockClient:
     
     def _detect_model_type(self) -> str:
         """
-        Détermine le type de modèle pour adapter le format de requête
-        
-        Returns:
-            Type de modèle: 'anthropic', 'meta', 'amazon', 'ai21', 'cohere', 'unknown'
+        Détecte le fournisseur du modèle pour adapter le format JSON de la requête.
+        Bedrock utilise des formats différents pour Anthropic, Meta, Amazon, etc.
         """
         model_id_lower = self.model_id.lower()
         

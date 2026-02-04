@@ -56,21 +56,13 @@ invoice-extractor/
 │   ├── main.py             # Handler Lambda principal
 │   ├── bedrock_client.py   # Client multi-modèles AWS Bedrock
 │   ├── dynamodb_client.py  # Client DynamoDB avec indexes
-│   ├── pdf_extractor.py    # Extraction PDF (PyPDF2 + pdfplumber)
+│   ├── pdf_extractor_simple.py # Extraction PDF (PyPDF2 uniquement)
 │   └── config.py           # Configuration intelligente AWS
-├── config/                 # Configuration
-│   ├── config.py          # (copié dans src_propre/)
-│   └── env.example        # Template variables d'environnement
-├── infrastructure/         # Infrastructure as Code
-│   └── cdk-stack.py       # Stack AWS CDK
-├── tests/                 # Tests unitaires et d'intégration
-├── docs/                  # Documentation supplémentaire
-├── scripts/               # Scripts utilitaires
-├── .gitignore            # Fichiers à ignorer
-├── cloudformation-template.yaml  # Template CloudFormation
-├── template.yaml         # Template AWS SAM
-├── requirements.txt      # Dépendances Python
-└── requirements-lambda.txt # Dépendances pour Lambda
+├── deploy.py               # Script de déploiement automatique
+├── cleanup.py              # Script de nettoyage AWS
+├── cloudformation-template-final.yaml # Infrastructure as Code
+├── requirements.txt        # Dépendances locales
+└── requirements-lambda.txt  # Dépendances Lambda
 ```
 
 ## 💻 Développement local

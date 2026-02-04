@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Outil d'extraction d'informations de factures PDF avec AWS Bedrock
-Version simplifiée utilisant seulement PyPDF2
+Outil d'extraction d'informations de factures PDF avec AWS Bedrock.
+Cette version utilise l'extracteur simplifié (PyPDF2 uniquement) pour une meilleure compatibilité Lambda.
 """
 
 import os
@@ -162,8 +162,10 @@ class InvoiceExtractorSimple:
             logger.warning(f"Texte PDF trop long ({len(pdf_text)} caractères), troncation à {max_text_length}")
             pdf_text = pdf_text[:max_text_length] + "... [texte tronqué]"
         
-        # Prompt exact du n8n qui fonctionnait, amélioré pour distinguer fournisseur/client
-        prompt = f"""Tu es un expert comptable. En te basant sur ces données : {pdf_text}
+        # Prompt optimisé pour distinguer fournisseur et client
+        # Inspiré de la logique n8n qui a fait ses preuves
+        prompt = f"""Tu es un expert comptable spécialisé dans l'analyse de factures.
+En te basant sur ce texte extrait du PDF : {pdf_text}
 
 Nom du fichier (peut contenir un indice sur le fournisseur) : {filename}
 
