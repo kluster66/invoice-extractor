@@ -11,9 +11,12 @@ import os
 import zipfile
 import shutil
 from pathlib import Path
+from dotenv import load_dotenv
 
-# Region par défaut
-AWS_REGION = "us-west-2"
+load_dotenv()
+
+AWS_REGION     = os.getenv("AWS_REGION", "us-west-2")
+BEDROCK_MODEL  = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-70b-instruct-v1:0")
 
 def run_command(command, description=None, ignore_errors=False):
     """Exécute une commande shell et retourne le résultat."""
@@ -292,7 +295,7 @@ def deploy_cloudformation_stack(lambda_code_bucket, lambda_code_key):
     
     parameters = [
         "ParameterKey=EnvironmentName,ParameterValue=prod",
-        "ParameterKey=BedrockModelId,ParameterValue=meta.llama3-1-70b-instruct-v1:0",
+        f"ParameterKey=BedrockModelId,ParameterValue={BEDROCK_MODEL}",
         f"ParameterKey=LambdaCodeBucket,ParameterValue={lambda_code_bucket}",
         f"ParameterKey=LambdaCodeKey,ParameterValue={lambda_code_key}",
         f"ParameterKey=BucketName,ParameterValue={input_bucket_name}"

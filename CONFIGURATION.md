@@ -45,14 +45,18 @@ aws sts get-caller-identity --query Account --output text
 
 ## Modèles Bedrock
 
-| Clé | ID complet | Activation |
-|-----|-----------|------------|
-| `llama-3-70b` | `meta.llama3-70b-instruct-v1:0` | Non requise |
-| `llama-3-1-70b` | `meta.llama3-1-70b-instruct-v1:0` | Non requise |
-| `claude-3-sonnet` | `anthropic.claude-3-sonnet-20240229-v1:0` | Requise |
-| `claude-3-haiku` | `anthropic.claude-3-haiku-20240307-v1:0` | Requise |
-| `claude-3-5-sonnet` | `anthropic.claude-3-5-sonnet-20241022-v2:0` | Requise |
-| `titan-text-express` | `amazon.titan-text-express-v1` | Requise |
+| Clé | ID complet | Statut | Activation |
+|-----|-----------|--------|------------|
+| `claude-haiku-4-5` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | **Défaut** ✅ | Requise |
+| `llama-3-1-70b` | `meta.llama3-1-70b-instruct-v1:0` | Fallback ✅ | Non requise |
+| `claude-3-5-haiku` | `anthropic.claude-3-5-haiku-20241022-v1:0` | Legacy ⚠️ | Requise |
+| `claude-3-haiku` | `anthropic.claude-3-haiku-20240307-v1:0` | Legacy ⚠️ | Requise |
+| `claude-3-sonnet` | `anthropic.claude-3-sonnet-20240229-v1:0` | Legacy ⚠️ | Requise |
+| `titan-text-express` | `amazon.titan-text-express-v1` | Legacy ⚠️ | Requise |
+
+> ⚠️ Les modèles **Legacy** dans Bedrock sont automatiquement bloqués après 30 jours sans usage, même si activés.
+
+> ℹ️ Les modèles avec le préfixe `us.` sont des **cross-region inference profiles** : ils routent automatiquement entre `us-east-1`, `us-west-2` et `us-west-1`. Si une **SCP (Service Control Policy)** bloque `bedrock:InvokeModel` sur `us-east-1`, utilisez `meta.llama3-1-70b-instruct-v1:0` comme fallback (appel direct en `us-west-2`, pas de cross-region).
 
 Changer de modèle via variable d'environnement Lambda :
 ```powershell
@@ -128,9 +132,10 @@ LambdaConfigurations:
 
 ### Permissions IAM du rôle Lambda
 
-- `s3:GetObject` sur le bucket d'entrée
+- `s3:GetObject`, `PutObject`, `DeleteObject`, `ListBucket` sur le bucket d'entrée
 - `dynamodb:PutItem`, `GetItem`, `Scan`, `Query`, `DeleteItem`, `DescribeTable` sur `invoices-extractor`
-- `bedrock:InvokeModel`
+- `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `bedrock:ListFoundationModels`
+- `aws-marketplace:ViewSubscriptions`, `aws-marketplace:Subscribe`, `aws-marketplace:Unsubscribe` — requis pour les inference profiles Claude 4.x
 - `logs:CreateLogGroup`, `CreateLogStream`, `PutLogEvents`
 
 ---

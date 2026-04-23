@@ -39,8 +39,6 @@ Resources:
       - LambdaInvokePermission
     Properties:
       BucketName: !Ref BucketName
-      VersioningConfiguration:
-        Status: Enabled
       NotificationConfiguration:
         LambdaConfigurations:
           - Event: s3:ObjectCreated:*
@@ -158,7 +156,14 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
                   - bedrock:ListFoundationModels
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - aws-marketplace:ViewSubscriptions
+                  - aws-marketplace:Subscribe
+                  - aws-marketplace:Unsubscribe
                 Resource: '*'
       Tags:
         - Key: Environment

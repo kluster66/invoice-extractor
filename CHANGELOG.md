@@ -7,6 +7,28 @@ versionnage selon [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [3.1.0] - 2026-04-23
+
+### Ajouté
+
+- **Permissions IAM marketplace** : `aws-marketplace:ViewSubscriptions`, `aws-marketplace:Subscribe` ajoutées au rôle Lambda — nécessaires pour invoquer Claude Haiku 4.5 via un inference profile
+- **Bouton Rafraîchir** dans l'UI : recharge les données DynamoDB sans recharger la page
+
+### Modifié
+
+- **Modèle Bedrock par défaut** : `us.anthropic.claude-haiku-4-5-20251001-v1:0` (Claude Haiku 4.5, cross-region inference profile)
+- **`bedrock_client.py`** : support de la Messages API (Claude 3+) en plus de l'ancienne Completions API (Claude 1/2) — distinction automatique selon l'ID du modèle
+- **`cleanup.py`** : réécriture complète avec boto3 — vide le bucket S3 avant de supprimer la stack (évite `DELETE_FAILED`), diagnostic des ressources bloquantes, messages d'erreur explicites
+- **Bucket S3** : versioning désactivé (le bucket est un passe-plat, pas un stockage de référence)
+- **UI** (`ui_invoices.py`) : bouton Rafraîchir déplacé à gauche, résumé (nombre de factures + total HT) déplacé à l'extrémité droite de la barre d'actions
+
+### Corrigé
+
+- Extraction Bedrock silencieusement vide avec Claude 3+ : la Completions API était utilisée à tort — remplacée par la Messages API (`anthropic_version: bedrock-2023-05-31`)
+- `DELETE_FAILED` sur `cleanup.py` quand le bucket S3 n'était pas vide : le script vide maintenant le bucket avant de supprimer la stack
+
+---
+
 ## [3.0.0] - 2026-04-23
 
 ### Ajouté

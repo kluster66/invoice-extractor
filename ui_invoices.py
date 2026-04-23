@@ -185,48 +185,52 @@ def main_page():
 
     with ui.column().classes("w-full p-6 gap-6"):
 
-        # ── Section upload ────────────────────────────────────────────────────
-        with ui.card().classes("w-full"):
-            ui.label("Déposer des factures").classes("text-base font-semibold mb-2")
+        # ── Upload + Filtres côte à côte ──────────────────────────────────────
+        with ui.row().classes("w-full gap-6 items-stretch"):
 
-            upload_status = ui.label("").classes("text-sm text-gray-500")
+            # Upload
+            with ui.card().classes("flex-1"):
+                ui.label("Déposer des factures").classes("text-base font-semibold mb-2")
 
-            async def handle_upload(e: events.UploadEventArguments):
-                try:
-                    filename = e.file.name
-                    content  = await e.file.read()
-                    upload_status.set_text(f"Upload en cours : {filename}…")
-                    upload_to_s3(filename, content)
-                    ui.notify(f"✅ {filename} uploadé — la Lambda va traiter la facture.", type="positive", timeout=5000)
-                    upload_status.set_text(f"Dernier upload réussi : {filename}")
-                except Exception as exc:
-                    ui.notify(f"❌ Erreur upload : {exc}", type="negative", timeout=0)
-                    upload_status.set_text(f"Erreur : {exc}")
+                upload_status = ui.label("").classes("text-sm text-gray-500")
 
-            def handle_rejected(e):
-                ui.notify("❌ Fichier refusé (format non supporté).", type="warning")
+                async def handle_upload(e: events.UploadEventArguments):
+                    try:
+                        filename = e.file.name
+                        content  = await e.file.read()
+                        upload_status.set_text(f"Upload en cours : {filename}…")
+                        upload_to_s3(filename, content)
+                        ui.notify(f"✅ {filename} uploadé — la Lambda va traiter la facture.", type="positive", timeout=5000)
+                        upload_status.set_text(f"Dernier upload réussi : {filename}")
+                    except Exception as exc:
+                        ui.notify(f"❌ Erreur upload : {exc}", type="negative", timeout=0)
+                        upload_status.set_text(f"Erreur : {exc}")
 
-            ui.upload(
-                label="Cliquez ou glissez vos PDF ici",
-                multiple=True,
-                auto_upload=True,
-                on_upload=handle_upload,
-                on_rejected=handle_rejected,
-            ).props('accept=".pdf,.PDF,application/pdf" color=blue flat bordered').classes("w-full")
+                def handle_rejected(e):
+                    ui.notify("❌ Fichier refusé (format non supporté).", type="warning")
 
-        # ── Filtres ───────────────────────────────────────────────────────────
-        with ui.card().classes("w-full"):
-            ui.label("Filtres").classes("text-base font-semibold mb-2")
-            with ui.row().classes("items-end gap-4 flex-wrap"):
-                fournisseur_input = ui.input("Fournisseur").props("clearable outlined dense").classes("w-48")
-                depuis_input      = ui.input("Depuis (YYYY-MM-DD)").props("clearable outlined dense").classes("w-48")
-                ui.button("Filtrer",       icon="search", on_click=lambda: apply_filters()).props("color=blue")
-                ui.button("Réinitialiser", icon="clear",  on_click=lambda: reset_filters()).props("flat")
+                ui.upload(
+                    label="Cliquez ou glissez vos PDF ici",
+                    multiple=True,
+                    auto_upload=True,
+                    on_upload=handle_upload,
+                    on_rejected=handle_rejected,
+                ).props('accept=".pdf,.PDF,application/pdf" color=blue flat bordered').classes("w-full")
+
+            # Filtres
+            with ui.card().classes("flex-1"):
+                ui.label("Filtres").classes("text-base font-semibold mb-2")
+                with ui.row().classes("items-end gap-3 flex-wrap"):
+                    fournisseur_input = ui.input("Fournisseur").props("clearable outlined dense").classes("w-44")
+                    depuis_input      = ui.input("Depuis (YYYY-MM-DD)").props("clearable outlined dense").classes("w-44")
+                    ui.button("Filtrer",       icon="search", on_click=lambda: apply_filters()).props("color=blue")
+                    ui.button("Réinitialiser", icon="clear",  on_click=lambda: reset_filters()).props("flat color=grey")
 
         # ── Résumé + actions ──────────────────────────────────────────────────
         with ui.row().classes("items-center justify-between w-full"):
-            summary = ui.label("").classes("text-sm text-gray-500")
-            with ui.row().classes("gap-2"):
+            ui.button("Rafraîchir", icon="refresh",
+                      on_click=lambda: load_data()).props("flat")
+            with ui.row().classes("items-center gap-2"):
                 ui.button("Exporter la sélection", icon="download",
                           on_click=lambda: export_selected()).props("color=blue flat")
                 ui.button("Tout exporter", icon="download",
@@ -235,6 +239,7 @@ def main_page():
                           on_click=lambda: confirm_delete_selected()).props("color=red flat")
                 ui.button("Tout supprimer", icon="delete_forever",
                           on_click=lambda: confirm_delete_all()).props("color=red outline")
+                summary = ui.label("").classes("text-sm text-gray-500 ml-4")
 
         # ── Tableau ───────────────────────────────────────────────────────────
         # Colonnes affichées (sans invoice_id)
@@ -360,7 +365,5 @@ def main_page():
 
     ui.timer(0.1, load_data, once=True)
 
-
-app.on_disconnect(lambda: app.shutdown())
 
 ui.run(title="Invoice Extractor", port=8080, reload=False)

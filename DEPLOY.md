@@ -135,12 +135,14 @@ aws cloudformation update-stack `
 
 ### Modèles disponibles
 
-| Modèle | ID | Activation requise |
-|--------|----|--------------------|
-| Llama 3.1 70B | `meta.llama3-1-70b-instruct-v1:0` | Non |
-| Claude 3.5 Sonnet | `anthropic.claude-3-5-sonnet-20241022-v2:0` | Oui |
-| Claude 3 Haiku | `anthropic.claude-3-haiku-20240307-v1:0` | Oui |
-| Amazon Titan | `amazon.titan-text-express-v1` | Oui |
+| Modèle | ID | Activation requise | Notes |
+|--------|----|--------------------|-------|
+| Claude Haiku 4.5 | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Oui | **Défaut** — cross-region inference profile |
+| Llama 3.1 70B | `meta.llama3-1-70b-instruct-v1:0` | Non | Fallback si SCP bloque `us-east-1` |
+| Claude 3.5 Sonnet | `anthropic.claude-3-5-sonnet-20241022-v2:0` | Oui | Legacy |
+| Claude 3 Haiku | `anthropic.claude-3-haiku-20240307-v1:0` | Oui | Legacy |
+
+> ⚠️ Les modèles `us.*` routent via plusieurs régions US. Si une SCP bloque `bedrock:InvokeModel` sur `us-east-1`, utilisez Llama 3.1 comme fallback.
 
 ---
 
@@ -153,9 +155,18 @@ aws s3api get-bucket-notification-configuration --bucket invoice-input-{account}
 ```
 Le trigger doit accepter `.pdf` ET `.PDF`. Si ce n'est pas le cas, redéployez avec `python deploy.py`.
 
-### Erreur "Model access not granted"
-- Utiliser Llama 3.1 70B (pas d'activation requise)
-- Ou activer le modèle dans : Console AWS → Bedrock → Model access
+### Erreur "Model access not granted" ou "AWS Marketplace actions"
+- Activer le modèle dans : Console AWS → Bedrock → Model access
+- Vérifier que le rôle Lambda a les permissions `aws-marketplace:ViewSubscriptions` et `aws-marketplace:Subscribe` (incluses dans le template CloudFormation depuis v3.1.0)
+- En cas de blocage persistant : utiliser Llama 3.1 70B comme fallback (pas d'activation requise)
+  ```powershell
+  aws lambda update-function-configuration --function-name invoice-extractor-prod --region us-west-2 --environment "Variables={ENVIRONMENT_NAME=prod,DYNAMODB_TABLE_NAME=invoices-extractor,S3_INPUT_BUCKET=invoice-input-{account}-us-west-2,BEDROCK_MODEL_ID=meta.llama3-1-70b-instruct-v1:0,LOG_LEVEL=INFO}"
+  ```
+
+### Erreur SCP — `explicit deny in a service control policy`
+Les cross-region inference profiles (`us.*`) peuvent router vers `us-east-1`. Si une SCP bloque cette région :
+1. Corriger la SCP pour autoriser `bedrock:InvokeModel` sur `us-east-1`
+2. Ou utiliser Llama 3.1 70B (appel direct en `us-west-2`, pas de cross-region)
 
 ### Stack en état ROLLBACK_COMPLETE
 ```powershell
@@ -178,16 +189,21 @@ aws logs filter-log-events `
 ## Nettoyage
 
 ```powershell
-# Via script
+# Via script (recommandé)
 python cleanup.py
+```
 
-# Via AWS CLI
+Le script `cleanup.py` :
+1. Vide le bucket S3 d'entrée **avant** de supprimer la stack (évite `DELETE_FAILED`)
+2. Supprime la stack CloudFormation et attend la fin
+3. Nettoie les ressources résiduelles (buckets, tables, fonctions, logs)
+4. Affiche les ressources bloquantes avec leur raison en cas d'échec
+
+```powershell
+# Via AWS CLI (si cleanup.py échoue)
+aws s3 rb s3://invoice-input-{account}-us-west-2 --force
 aws cloudformation delete-stack --stack-name invoice-extractor --region us-west-2
 aws cloudformation wait stack-delete-complete --stack-name invoice-extractor --region us-west-2
-
-# Vider et supprimer les buckets S3 manuellement si nécessaire
-aws s3 rb s3://invoice-input-{account}-us-west-2 --force
-aws s3 rb s3://invoice-extractor-deploy-{account}-us-west-2 --force
 ```
 
 ---

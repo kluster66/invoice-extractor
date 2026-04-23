@@ -74,7 +74,7 @@ class Config:
     AWS_SESSION_TOKEN = credentials["token"]
     
     # Bedrock Configuration
-    BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-sonnet-20240229-v1:0")
+    BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-1-70b-instruct-v1:0")
     BEDROCK_MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "1000"))
     BEDROCK_TEMPERATURE = float(os.getenv("BEDROCK_TEMPERATURE", "0.1"))
     

@@ -7,267 +7,372 @@ Supprime toutes les ressources AWS créées par le déploiement.
 import subprocess
 import sys
 import json
+import os
 import time
+import boto3
+from botocore.exceptions import ClientError
+from dotenv import load_dotenv
+
+load_dotenv()
+
+REGION     = os.getenv("AWS_REGION", "us-west-2")
+STACK_NAME = "invoice-extractor"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def run_command(command):
-    """Exécute une commande shell."""
+    """Exécute une commande shell et retourne (success, stdout, stderr)."""
     try:
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        return result.returncode == 0, result.stdout, result.stderr
+        return result.returncode == 0, result.stdout.strip(), result.stderr.strip()
     except Exception as e:
         return False, "", str(e)
 
-def cleanup_cloudformation():
-    """Nettoie la stack CloudFormation."""
-    print("\n1. Nettoyage de la stack CloudFormation...")
-    
-    stack_name = "invoice-extractor"
-    region = "us-west-2"
-    
-    # Vérifier si la stack existe
-    success, output, error = run_command(
-        f"aws cloudformation describe-stacks --stack-name {stack_name} --region {region}"
-    )
-    
-    if not success:
-        print("   INFO: Stack non trouvee")
-        return True
-    
-    print(f"   Stack trouvee: {stack_name}")
-    
-    # Vider les buckets S3 avant suppression
-    print("   Vidage des buckets S3...")
-    
-    # Récupérer les outputs
-    success, outputs, error = run_command(
-        f"aws cloudformation describe-stacks --stack-name {stack_name} --region {region} "
-        f"--query 'Stacks[0].Outputs' --output json"
-    )
-    
-    if success and outputs.strip():
-        try:
-            outputs_list = json.loads(outputs)
-            for output_item in outputs_list:
-                key = output_item.get('OutputKey', '')
-                value = output_item.get('OutputValue', '')
-                
-                if key in ['BucketName', 'DeploymentBucketName'] and value:
-                    print(f"   Vidage du bucket: {value}")
-                    run_command(f"aws s3 rm s3://{value} --recursive --region {region}")
-        except:
-            pass
-    
-    # Supprimer la stack
-    print("   Suppression de la stack...")
-    success, output, error = run_command(
-        f"aws cloudformation delete-stack --stack-name {stack_name} --region {region}"
-    )
-    
-    if success:
-        print("   OK: Suppression initiee")
-        
-        # Attendre
-        print("   Attente de la suppression...")
-        run_command(
-            f"aws cloudformation wait stack-delete-complete --stack-name {stack_name} --region {region}"
-        )
-        
-        print("   OK: Stack supprimee")
-        return True
-    else:
-        print(f"   ERREUR: {error}")
+
+def warn(msg):
+    print(f"   ⚠️  {msg}")
+
+
+def ok(msg):
+    print(f"   ✅ {msg}")
+
+
+def err(msg):
+    print(f"   ❌ {msg}")
+
+
+# ---------------------------------------------------------------------------
+# S3 — vidage complet incluant toutes les versions
+# ---------------------------------------------------------------------------
+
+def empty_bucket(bucket_name: str) -> bool:
+    """
+    Vide un bucket S3 (sans versioning).
+    Retourne True si le bucket est vide (ou n'existe pas), False en cas d'erreur.
+    """
+    s3 = boto3.client("s3", region_name=REGION)
+
+    # Vérifier que le bucket existe
+    try:
+        s3.head_bucket(Bucket=bucket_name)
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code in ("404", "NoSuchBucket"):
+            ok(f"Bucket déjà inexistant : {bucket_name}")
+            return True
+        warn(f"Impossible d'accéder au bucket {bucket_name} : {e}")
         return False
 
-def cleanup_s3_buckets():
-    """Nettoie les buckets S3."""
-    print("\n2. Nettoyage des buckets S3...")
-    
-    region = "us-west-2"
-    
-    # Lister les buckets
-    success, output, error = run_command(
-        f"aws s3api list-buckets --region {region} --query 'Buckets[?contains(Name, \"invoice-extractor\")].Name' --output json"
-    )
-    
-    if not success or not output.strip() or output.strip() == '[]':
-        print("   INFO: Aucun bucket trouve")
-        return True
-    
+    print(f"   Vidage du bucket : {bucket_name}")
     try:
-        buckets = json.loads(output)
-        for bucket in buckets:
-            print(f"   Suppression du bucket: {bucket}")
-            
-            # Vider le bucket
-            run_command(f"aws s3 rm s3://{bucket} --recursive --region {region}")
-            
-            # Supprimer le bucket
-            success, _, _ = run_command(
-                f"aws s3api delete-bucket --bucket {bucket} --region {region}"
-            )
-            
-            if success:
-                print(f"   OK: Bucket supprime: {bucket}")
-            else:
-                print(f"   ATTENTION: Impossible de supprimer: {bucket}")
-        
+        paginator = s3.get_paginator("list_objects_v2")
+        total = 0
+        for page in paginator.paginate(Bucket=bucket_name):
+            objects = page.get("Contents", [])
+            if objects:
+                s3.delete_objects(
+                    Bucket=bucket_name,
+                    Delete={"Objects": [{"Key": o["Key"]} for o in objects], "Quiet": True},
+                )
+                total += len(objects)
+        ok(f"Bucket vidé ({total} objet(s))")
         return True
-    except:
-        print("   INFO: Aucun bucket a supprimer")
+    except ClientError as e:
+        err(f"Erreur lors du vidage de {bucket_name} : {e}")
+        return False
+
+
+def get_bucket_name_from_stack() -> str | None:
+    """Récupère le nom du bucket depuis les outputs CloudFormation."""
+    cf = boto3.client("cloudformation", region_name=REGION)
+    try:
+        resp = cf.describe_stacks(StackName=STACK_NAME)
+        outputs = resp["Stacks"][0].get("Outputs", [])
+        for o in outputs:
+            if o["OutputKey"] == "BucketName":
+                return o["OutputValue"]
+    except ClientError:
+        pass
+    # Fallback : lire depuis .env
+    return os.getenv("S3_INPUT_BUCKET")
+
+
+# ---------------------------------------------------------------------------
+# CloudFormation
+# ---------------------------------------------------------------------------
+
+def cleanup_cloudformation() -> bool:
+    print(f"\n1. Nettoyage de la stack CloudFormation ({STACK_NAME})...")
+
+    cf = boto3.client("cloudformation", region_name=REGION)
+
+    # Vérifier si la stack existe
+    try:
+        resp = cf.describe_stacks(StackName=STACK_NAME)
+        stack = resp["Stacks"][0]
+        status = stack["StackStatus"]
+    except ClientError as e:
+        if "does not exist" in str(e):
+            ok("Stack inexistante — rien à faire")
+            return True
+        err(f"Impossible de décrire la stack : {e}")
+        return False
+
+    print(f"   Statut actuel : {status}")
+
+    # États terminaux non-supprimables — informer et continuer
+    if status == "DELETE_COMPLETE":
+        ok("Stack déjà supprimée")
         return True
 
-def cleanup_dynamodb_tables():
-    """Nettoie les tables DynamoDB."""
+    if status not in (
+        "CREATE_COMPLETE", "UPDATE_COMPLETE", "ROLLBACK_COMPLETE",
+        "UPDATE_ROLLBACK_COMPLETE", "DELETE_FAILED",
+    ):
+        err(f"État inattendu '{status}' — suppression risquée. Vérifiez la console AWS.")
+        return False
+
+    # Vider le bucket S3 AVANT de lancer la suppression de stack
+    bucket = get_bucket_name_from_stack()
+    if bucket:
+        if not empty_bucket(bucket):
+            err("Impossible de vider le bucket. Arrêt pour éviter un DELETE_FAILED.")
+            return False
+    else:
+        warn("Nom du bucket introuvable — la suppression de stack pourrait échouer.")
+
+    # Lancer la suppression
+    print("   Suppression de la stack en cours...")
+    try:
+        cf.delete_stack(StackName=STACK_NAME)
+    except ClientError as e:
+        err(f"Impossible de lancer la suppression : {e}")
+        return False
+
+    # Attendre avec feedback
+    print("   Attente (peut prendre 2-5 minutes)...", end="", flush=True)
+    waiter = cf.get_waiter("stack_delete_complete")
+    try:
+        waiter.wait(
+            StackName=STACK_NAME,
+            WaiterConfig={"Delay": 10, "MaxAttempts": 60},
+        )
+        print(" OK")
+        ok("Stack supprimée")
+        return True
+    except Exception:
+        print()
+        # Diagnostiquer ce qui a bloqué
+        try:
+            resp = cf.describe_stacks(StackName=STACK_NAME)
+            final_status = resp["Stacks"][0]["StackStatus"]
+        except ClientError:
+            final_status = "UNKNOWN"
+
+        if final_status == "DELETE_FAILED":
+            # Lister les ressources bloquantes
+            try:
+                events = cf.describe_stack_events(StackName=STACK_NAME)["StackEvents"]
+                failed = [
+                    e for e in events
+                    if e.get("ResourceStatus") == "DELETE_FAILED"
+                ]
+                if failed:
+                    err("Ressources bloquant la suppression :")
+                    for f in failed[:5]:
+                        print(f"     • {f['LogicalResourceId']} : {f.get('ResourceStatusReason', '?')}")
+            except ClientError:
+                pass
+
+        err(f"Suppression échouée (statut final : {final_status})")
+        err("Astuce : relancez cleanup.py — le bucket est maintenant vide.")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# S3 — nettoyage des buckets résiduels
+# ---------------------------------------------------------------------------
+
+def cleanup_s3_buckets() -> bool:
+    print("\n2. Vérification des buckets S3 résiduels...")
+
+    s3 = boto3.client("s3", region_name=REGION)
+    try:
+        buckets = s3.list_buckets()["Buckets"]
+    except ClientError as e:
+        warn(f"Impossible de lister les buckets : {e}")
+        return True
+
+    targets = [
+        b["Name"] for b in buckets
+        if "invoice-input" in b["Name"] or "invoice-extractor" in b["Name"]
+    ]
+
+    if not targets:
+        ok("Aucun bucket résiduel")
+        return True
+
+    all_ok = True
+    for bucket in targets:
+        print(f"   Suppression bucket résiduel : {bucket}")
+        if not empty_bucket(bucket):
+            all_ok = False
+            continue
+        try:
+            s3.delete_bucket(Bucket=bucket)
+            ok(f"Bucket supprimé : {bucket}")
+        except ClientError as e:
+            err(f"Impossible de supprimer {bucket} : {e}")
+            all_ok = False
+
+    return all_ok
+
+
+# ---------------------------------------------------------------------------
+# DynamoDB
+# ---------------------------------------------------------------------------
+
+def cleanup_dynamodb_tables() -> bool:
     print("\n3. Nettoyage des tables DynamoDB...")
-    
-    region = "us-west-2"
-    
-    # Lister les tables
-    success, output, error = run_command(
-        f"aws dynamodb list-tables --region {region} --query 'TableNames[?contains(@, \"invoice\")]' --output json"
-    )
-    
-    if not success or not output.strip() or output.strip() == '[]':
-        print("   INFO: Aucune table trouvee")
-        return True
-    
+
+    ddb = boto3.client("dynamodb", region_name=REGION)
     try:
-        tables = json.loads(output)
-        for table in tables:
-            print(f"   Suppression de la table: {table}")
-            
-            success, _, _ = run_command(
-                f"aws dynamodb delete-table --table-name {table} --region {region}"
-            )
-            
-            if success:
-                print(f"   OK: Table supprimee: {table}")
-            else:
-                print(f"   ATTENTION: Impossible de supprimer: {table}")
-        
-        return True
-    except:
-        print("   INFO: Aucune table a supprimer")
+        tables = ddb.list_tables()["TableNames"]
+    except ClientError as e:
+        warn(f"Impossible de lister les tables : {e}")
         return True
 
-def cleanup_lambda_functions():
-    """Nettoie les fonctions Lambda."""
+    targets = [t for t in tables if "invoice" in t.lower()]
+
+    if not targets:
+        ok("Aucune table résiduelle")
+        return True
+
+    all_ok = True
+    for table in targets:
+        try:
+            ddb.delete_table(TableName=table)
+            ok(f"Table supprimée : {table}")
+        except ClientError as e:
+            err(f"Impossible de supprimer {table} : {e}")
+            all_ok = False
+
+    return all_ok
+
+
+# ---------------------------------------------------------------------------
+# Lambda
+# ---------------------------------------------------------------------------
+
+def cleanup_lambda_functions() -> bool:
     print("\n4. Nettoyage des fonctions Lambda...")
-    
-    region = "us-west-2"
-    
-    # Lister les fonctions
-    success, output, error = run_command(
-        f"aws lambda list-functions --region {region} --query 'Functions[?contains(FunctionName, \"invoice-extractor\")].FunctionName' --output json"
-    )
-    
-    if not success or not output.strip() or output.strip() == '[]':
-        print("   INFO: Aucune fonction trouvee")
-        return True
-    
+
+    lmb = boto3.client("lambda", region_name=REGION)
     try:
-        functions = json.loads(output)
-        for function in functions:
-            print(f"   Suppression de la fonction: {function}")
-            
-            success, _, _ = run_command(
-                f"aws lambda delete-function --function-name {function} --region {region}"
-            )
-            
-            if success:
-                print(f"   OK: Fonction supprimee: {function}")
-            else:
-                print(f"   ATTENTION: Impossible de supprimer: {function}")
-        
-        return True
-    except:
-        print("   INFO: Aucune fonction a supprimer")
+        functions = lmb.list_functions()["Functions"]
+    except ClientError as e:
+        warn(f"Impossible de lister les fonctions : {e}")
         return True
 
-def cleanup_cloudwatch_logs():
-    """Nettoie les groupes de logs CloudWatch."""
+    targets = [
+        f["FunctionName"] for f in functions
+        if "invoice-extractor" in f["FunctionName"]
+    ]
+
+    if not targets:
+        ok("Aucune fonction résiduelle")
+        return True
+
+    all_ok = True
+    for fn in targets:
+        try:
+            lmb.delete_function(FunctionName=fn)
+            ok(f"Fonction supprimée : {fn}")
+        except ClientError as e:
+            err(f"Impossible de supprimer {fn} : {e}")
+            all_ok = False
+
+    return all_ok
+
+
+# ---------------------------------------------------------------------------
+# CloudWatch Logs
+# ---------------------------------------------------------------------------
+
+def cleanup_cloudwatch_logs() -> bool:
     print("\n5. Nettoyage des groupes de logs CloudWatch...")
-    
-    region = "us-west-2"
-    
-    # Lister les groupes de logs
-    success, output, error = run_command(
-        f"aws logs describe-log-groups --region {region} --query 'logGroups[?contains(logGroupName, \"invoice-extractor\")].logGroupName' --output json"
-    )
-    
-    if not success or not output.strip() or output.strip() == '[]':
-        print("   INFO: Aucun groupe de logs trouve")
-        return True
-    
+
+    logs = boto3.client("logs", region_name=REGION)
     try:
-        log_groups = json.loads(output)
-        for log_group in log_groups:
-            print(f"   Suppression du groupe de logs: {log_group}")
-            
-            success, _, _ = run_command(
-                f"aws logs delete-log-group --log-group-name {log_group} --region {region}"
-            )
-            
-            if success:
-                print(f"   OK: Groupe de logs supprime: {log_group}")
-            else:
-                print(f"   ATTENTION: Impossible de supprimer: {log_group}")
-        
+        paginator = logs.get_paginator("describe_log_groups")
+        log_groups = []
+        for page in paginator.paginate():
+            log_groups.extend(page["logGroups"])
+    except ClientError as e:
+        warn(f"Impossible de lister les groupes de logs : {e}")
         return True
-    except:
-        print("   INFO: Aucun groupe de logs a supprimer")
+
+    targets = [
+        g["logGroupName"] for g in log_groups
+        if "invoice-extractor" in g["logGroupName"]
+    ]
+
+    if not targets:
+        ok("Aucun groupe de logs résiduel")
         return True
+
+    all_ok = True
+    for lg in targets:
+        try:
+            logs.delete_log_group(logGroupName=lg)
+            ok(f"Groupe de logs supprimé : {lg}")
+        except ClientError as e:
+            err(f"Impossible de supprimer {lg} : {e}")
+            all_ok = False
+
+    return all_ok
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main():
-    """Fonction principale."""
     print("=" * 60)
-    print("NETTOYAGE AWS - INVOICE EXTRACTOR")
+    print("NETTOYAGE AWS — INVOICE EXTRACTOR")
+    print(f"Région : {REGION}  |  Stack : {STACK_NAME}")
     print("=" * 60)
-    
-    try:
-        # Vérifier AWS CLI
-        print("\nVerification de la configuration AWS...")
-        success, output, error = run_command("aws sts get-caller-identity")
-        if not success:
-            print("ERREUR: AWS CLI non configure ou credentials invalides")
-            print("CONSEIL: Executez 'aws configure' pour configurer AWS CLI")
-            return 1
-        
-        # Nettoyer toutes les ressources
-        all_success = True
-        
-        all_success &= cleanup_cloudformation()
-        all_success &= cleanup_s3_buckets()
-        all_success &= cleanup_dynamodb_tables()
-        all_success &= cleanup_lambda_functions()
-        all_success &= cleanup_cloudwatch_logs()
-        
-        print("\n" + "=" * 60)
-        
-        if all_success:
-            print("OK: NETTOYAGE TERMINE AVEC SUCCES !")
-            print("\nResume :")
-            print("- Stack CloudFormation supprimee")
-            print("- Buckets S3 supprimes")
-            print("- Tables DynamoDB supprimees")
-            print("- Fonctions Lambda supprimees")
-            print("- Groupes de logs CloudWatch supprimes")
-            print("\nVous pouvez maintenant redeployer avec : python deploy.py")
-        else:
-            print("ATTENTION: NETTOYAGE PARTIEL")
-            print("\nCertaines ressources n'ont pas pu etre supprimees.")
-            print("Verifiez manuellement dans la console AWS.")
-        
-        print("\n" + "=" * 60)
-        
-        return 0 if all_success else 1
-        
-    except KeyboardInterrupt:
-        print("\n\nERREUR: Nettoyage interrompu par l'utilisateur")
+
+    # Vérifier les credentials AWS
+    success, identity, error = run_command("aws sts get-caller-identity --output text --query Account")
+    if not success:
+        err("AWS CLI non configuré ou credentials invalides")
+        print("Conseil : exécutez 'aws configure'")
         return 1
-    except Exception as e:
-        print(f"\nERREUR: Erreur inattendue: {e}")
-        return 1
+    print(f"\n✅ Compte AWS : {identity}")
+
+    all_success = True
+    all_success &= cleanup_cloudformation()
+    all_success &= cleanup_s3_buckets()
+    all_success &= cleanup_dynamodb_tables()
+    all_success &= cleanup_lambda_functions()
+    all_success &= cleanup_cloudwatch_logs()
+
+    print("\n" + "=" * 60)
+    if all_success:
+        print("✅ NETTOYAGE TERMINÉ AVEC SUCCÈS")
+        print("\nVous pouvez redéployer avec : python deploy.py")
+    else:
+        print("⚠️  NETTOYAGE PARTIEL — certaines ressources n'ont pas pu être supprimées.")
+        print("Vérifiez les erreurs ci-dessus et la console AWS.")
+        print("Vous pouvez relancer cleanup.py pour retenter.")
+    print("=" * 60)
+
+    return 0 if all_success else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

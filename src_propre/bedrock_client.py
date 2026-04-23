@@ -41,11 +41,18 @@ class BedrockClient:
         """
         Détecte le fournisseur du modèle pour adapter le format JSON de la requête.
         Bedrock utilise des formats différents pour Anthropic, Meta, Amazon, etc.
+        Claude 3+ (y compris les inference profiles us.*) exige la Messages API.
+        Claude 1/2 utilise l'ancienne Completions API.
         """
         model_id_lower = self.model_id.lower()
-        
+
         if "anthropic" in model_id_lower:
-            return "anthropic"
+            # Ancienne Completions API uniquement pour Claude 1 / 2 / instant
+            legacy_patterns = ["claude-v1", "claude-v2", "claude-instant", "claude-2"]
+            if any(p in model_id_lower for p in legacy_patterns):
+                return "anthropic_legacy"
+            # Claude 3 et supérieur → Messages API
+            return "anthropic_messages"
         elif "meta" in model_id_lower:
             return "meta"
         elif "amazon" in model_id_lower:
@@ -67,8 +74,19 @@ class BedrockClient:
         Returns:
             Corps de la requête formaté
         """
-        if self.model_type == "anthropic":
-            # Format Anthropic Claude (Completions API)
+        if self.model_type == "anthropic_messages":
+            # Format Anthropic Claude 3+ (Messages API — obligatoire pour claude-3/4/haiku-4…)
+            return {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
+            }
+
+        elif self.model_type == "anthropic_legacy":
+            # Format Anthropic Claude 1/2 (ancienne Completions API)
             return {
                 "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
                 "max_tokens_to_sample": self.max_tokens,
@@ -129,12 +147,15 @@ class BedrockClient:
             }
         
         else:
-            # Format générique (essayer le format Anthropic)
-            logger.warning(f"Type de modèle inconnu: {self.model_id}, utilisation du format Anthropic par défaut")
+            # Format générique : essayer la Messages API (format Claude 3+)
+            logger.warning(f"Type de modèle inconnu: {self.model_id}, utilisation de la Messages API par défaut")
             return {
-                "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
-                "max_tokens_to_sample": self.max_tokens,
-                "temperature": self.temperature
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ]
             }
     
     def _parse_response(self, response_body: Dict[str, Any]) -> str:
@@ -147,7 +168,14 @@ class BedrockClient:
         Returns:
             Texte extrait de la réponse
         """
-        if self.model_type == "anthropic":
+        if self.model_type == "anthropic_messages":
+            # Messages API : { "content": [{"type": "text", "text": "..."}] }
+            content = response_body.get("content", [])
+            if content and isinstance(content, list):
+                return content[0].get("text", "").strip()
+            return ""
+
+        elif self.model_type == "anthropic_legacy":
             return response_body.get("completion", "").strip()
         
         elif self.model_type == "meta":
