@@ -50,6 +50,13 @@ Resources:
                   - Name: suffix
                     Value: .pdf
             Function: !GetAtt InvoiceExtractorLambda.Arn
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .PDF
+            Function: !GetAtt InvoiceExtractorLambda.Arn
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName

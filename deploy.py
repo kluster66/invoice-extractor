@@ -116,20 +116,23 @@ def create_minimal_lambda_package():
         
         print(f"OK: Code source copié depuis {src_dir}")
         
-        # Dépendances minimales pour Lambda
+        # Dépendances à packager (boto3/botocore sont fournis nativement par le runtime Lambda)
         dependencies = [
-            "boto3",
-            "botocore",
             "PyPDF2",
             "python-dotenv",
             "typing_extensions"
         ]
-        
+
+        # S'assurer que pip est disponible (le .venv peut ne pas en avoir)
+        print("Vérification de pip...")
+        import ensurepip
+        ensurepip.bootstrap(upgrade=True)
+
         # Installer les dépendances dans le package
         print("Installation des dépendances...")
         for dep in dependencies:
             success, output = run_command(
-                f"python -m pip install {dep} --target {package_dir} --no-deps"
+                f'"{sys.executable}" -m pip install {dep} --target {package_dir} --quiet'
             )
             if success:
                 print(f"  Installé: {dep}")

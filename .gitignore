@@ -229,6 +229,19 @@ site/
 # Ancien répertoire src avec toutes les dépendances (NE PAS versionner)
 src/
 
+# Factures réelles (données sensibles)
+factures/
+
+# Fichiers non utilisés / debug
+not_used_*
+src_propre/not_used_*
+
+# Répertoire Claude Code (worktrees, sessions)
+.claude/
+
+# Package de déploiement Lambda temporaire
+lambda_package_deploy/
+
 # Fichiers de réponse/test temporaires
 response.json
 *.response.json

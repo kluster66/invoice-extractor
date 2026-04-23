@@ -195,6 +195,7 @@ ASTUCE: Le nom du fichier contient souvent le nom du FOURNISSEUR
 Champs à extraire :
 - fournisseur (Nom de la société ÉMETTRICE de la facture, PAS le client/destinataire. Utilise le nom du fichier comme indice si nécessaire)
 - montant_ht (Montant hors taxes, nombre uniquement)
+- devise (Devise de la facture, ex: EUR, USD, GBP. Cherche le symbole €/$£ ou le code devise explicite)
 - numero_facture (Numéro de la facture)
 - date_facture (Date de la facture au format YYYY-MM-DD)
 - chrono (Le numéro Chrono du document si présent)
@@ -204,6 +205,7 @@ Champs à extraire :
 Champs requis :
 - fournisseur (String) - ATTENTION: société ÉMETTRICE, pas le client. Vérifie le nom du fichier ! Si tu vois BOARDRIDERS, ce n'est PAS le fournisseur !
 - montant_ht (Number)
+- devise (String - code ISO 4217, ex: EUR)
 - numero_facture (String)
 - date_facture (YYYY-MM-DD)
 - chrono (Number/String)
