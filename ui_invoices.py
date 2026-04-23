@@ -9,7 +9,10 @@ import io
 import json
 import os
 from datetime import datetime
+from dotenv import load_dotenv
 from nicegui import ui, app, events
+
+load_dotenv()
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
