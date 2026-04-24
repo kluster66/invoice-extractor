@@ -15,7 +15,7 @@ invoice-extractor/
 ├── deploy.py                          # Script de déploiement AWS
 ├── cleanup.py                         # Script de nettoyage AWS
 ├── cloudformation-template-final.yaml # Infrastructure as Code
-├── requirements.txt                   # Dépendances locales (+ nicegui, openpyxl)
+├── requirements.txt                   # Dépendances locales (nicegui, openpyxl inclus)
 ├── requirements-lambda.txt            # Dépendances Lambda
 ├── env.example                        # Template de configuration
 └── .gitignore
@@ -32,7 +32,6 @@ cd invoice-extractor
 uv venv .venv
 .\.venv\Scripts\Activate.ps1
 uv pip install -r requirements.txt
-uv pip install nicegui openpyxl
 
 # 3. Configuration
 copy env.example .env

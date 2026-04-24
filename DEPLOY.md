@@ -29,7 +29,6 @@ python --version
 uv venv .venv
 .\.venv\Scripts\Activate.ps1
 uv pip install -r requirements.txt
-uv pip install nicegui openpyxl
 ```
 
 ### Fichier .env

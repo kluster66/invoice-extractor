@@ -53,7 +53,6 @@ uv venv .venv
 
 # 3. Installer les dépendances
 uv pip install -r requirements.txt
-uv pip install nicegui openpyxl
 
 # 4. Créer le fichier de configuration local
 copy env.example .env
