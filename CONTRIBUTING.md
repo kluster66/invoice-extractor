@@ -83,10 +83,26 @@ pytest tests/ --cov=src_propre --cov-report=html
 
 ## Ajouter un champ extrait
 
-1. Modifier le prompt dans `src_propre/main.py` (`_create_prompt`)
-2. Ajouter la colonne dans `COLUMNS` de `ui_invoices.py` et `view_invoices.py`
-3. Redéployer avec `python deploy.py`
-4. Retraiter les factures existantes si nécessaire
+1. Modifier le prompt dans `src_propre/main.py` (`_create_prompt`) — ajouter le champ dans le JSON exemple
+2. Ajouter l'alias dans `_normalize_field_names` de `bedrock_client.py`
+3. Ajouter le champ dans `extracted_fields` de `dynamodb_client.py`
+4. Ajouter la colonne dans `COLUMNS` de `ui_invoices.py` et `view_invoices.py`
+5. Redéployer avec `python deploy.py`
+6. Retraiter les factures existantes si nécessaire
+
+## Ajouter un client connu (nouvelle entité du groupe)
+
+Modifier `KNOWN_CLIENTS` dans `src_propre/main.py` :
+
+```python
+KNOWN_CLIENTS = [
+    "BOARDRIDERS",
+    "NA PALI",
+    # Ajouter la nouvelle entité ici (en majuscules)
+]
+```
+
+La liste est injectée dans le prompt Bedrock et utilisée pour la correction automatique client/fournisseur. Redéployer après modification.
 
 ## Style de code
 

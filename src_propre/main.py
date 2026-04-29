@@ -5,10 +5,11 @@ Cette version utilise l'extracteur simplifié (PyPDF2 uniquement) pour une meill
 """
 
 import os
+import re
 import json
 import logging
 import boto3
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote_plus
@@ -16,6 +17,29 @@ from urllib.parse import unquote_plus
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Entités clientes connues — jamais fournisseurs (celui qui reçoit et paie la facture).
+# Compléter si de nouvelles entités du groupe sont ajoutées.
+KNOWN_CLIENTS = [
+    "BOARDRIDERS",
+    "NA PALI",
+    "QUIKSILVER",
+    "KAUAI",
+    "VANUATU",
+    "EMERALD COAST",
+    "PUKALANI",
+    "HANALEI",
+    "TARAWA",
+    "SUNSHINE DIFFUSION",
+]
+
+# Mots génériques présents dans les noms de fichiers de factures, à ignorer
+# lors de l'extraction du fournisseur depuis le nom du fichier.
+_FILENAME_NOISE_WORDS = {
+    "FACTURE", "INVOICE", "FACT", "INV", "PDF",
+    "HT", "TTC", "TVA", "VAT",
+    "MG", "PLVT", "FR", "ES", "DE", "EN",
+}
 
 # Import des modules locaux
 try:
@@ -86,73 +110,72 @@ class InvoiceExtractorSimple:
     
     def _fix_supplier_if_needed(self, data: Dict[str, Any], filename: str) -> Dict[str, Any]:
         """
-        Corrige le fournisseur si le LLM a confondu client et fournisseur
-        
-        Args:
-            data: Données extraites
-            filename: Nom du fichier (contient souvent le fournisseur)
-            
-        Returns:
-            Données corrigées
+        Corrige le fournisseur si le LLM a confondu client et fournisseur.
+
+        Quand le LLM met un client connu dans le champ fournisseur, on tente
+        d'extraire le vrai fournisseur depuis le nom du fichier par élimination
+        (sans liste fermée de fournisseurs).
         """
-        # Liste des clients connus (jamais fournisseurs)
-        known_clients = [
-            "BOARDRIDERS",
-            "NA PALI",
-            "QUIKSILVER",
-            "KAUAI",
-            "VANUATU",
-            "EMERALD COAST",
-            "PUKALANI",
-            "HANALEI",
-            "TARAWA",
-            "SUNSHINE DIFFUSION"
-        ]
-        
-        # Liste des fournisseurs connus
-        known_suppliers = [
-            "TELEFONICA",
-            "CEGEDIM",
-            "BOUYGUES",
-            "ORANGE",
-            "SFR",
-            "FREE",
-            "OVH"
-        ]
-        
         fournisseur = data.get("fournisseur", "")
         if not fournisseur:
             return data
-        
+
         fournisseur_upper = fournisseur.upper()
-        
-        # Vérifier si le fournisseur extrait est en fait un client connu
-        is_known_client = any(client in fournisseur_upper for client in known_clients)
-        
+        is_known_client = any(client in fournisseur_upper for client in KNOWN_CLIENTS)
+
         if is_known_client:
-            logger.warning(f"Le LLM a identifié '{fournisseur}' comme fournisseur, mais c'est un client connu")
-            
-            # Essayer d'extraire le vrai fournisseur depuis le nom du fichier
-            filename_upper = filename.upper()
-            for supplier in known_suppliers:
-                if supplier in filename_upper:
-                    logger.info(f"Fournisseur corrigé depuis le nom du fichier: {supplier}")
-                    data["fournisseur"] = supplier
-                    return data
-            
-            logger.warning("Impossible de déterminer le fournisseur depuis le nom du fichier")
-            data["fournisseur"] = None
-        
+            logger.warning(
+                f"Le LLM a identifié '{fournisseur}' comme fournisseur, "
+                "mais c'est un client connu — tentative de correction depuis le nom du fichier"
+            )
+            supplier = self._extract_supplier_from_filename(filename)
+            if supplier:
+                logger.info(f"Fournisseur extrait depuis le nom du fichier: {supplier}")
+                data["fournisseur"] = supplier
+            else:
+                logger.warning("Impossible de déterminer le fournisseur depuis le nom du fichier")
+                data["fournisseur"] = None
+
         return data
+
+    def _extract_supplier_from_filename(self, filename: str) -> Optional[str]:
+        """
+        Extrait le nom du fournisseur depuis le nom du fichier par élimination.
+
+        Logique : on retire les séquences numériques (dates, chronos…),
+        les noms de clients connus et les mots génériques de facturation.
+        Le premier token significatif restant est retenu comme fournisseur.
+        Fonctionne pour n'importe quel fournisseur, sans liste pré-définie.
+        """
+        name = Path(filename).stem.upper()
+
+        # Supprimer les séquences purement numériques (dates, numéros de chrono…)
+        name = re.sub(r'\b\d+\b', ' ', name)
+
+        # Supprimer les clients connus
+        for client in KNOWN_CLIENTS:
+            name = name.replace(client, ' ')
+
+        # Découper et filtrer les tokens non significatifs
+        tokens = [
+            t for t in re.split(r'[\s_\-\.]+', name)
+            if t and t not in _FILENAME_NOISE_WORDS and len(t) > 2
+        ]
+
+        if not tokens:
+            return None
+
+        # Capitaliser proprement (ex: "TELEFONICA" → "Telefonica")
+        return tokens[0].capitalize()
     
     def _create_prompt(self, pdf_text: str, filename: str) -> str:
         """
-        Crée le prompt pour Bedrock (format n8n qui fonctionnait)
-        
+        Crée le prompt d'extraction pour Bedrock.
+
         Args:
             pdf_text: Texte extrait du PDF
             filename: Nom du fichier
-            
+
         Returns:
             Prompt formaté
         """
@@ -162,59 +185,46 @@ class InvoiceExtractorSimple:
             logger.warning(f"Texte PDF trop long ({len(pdf_text)} caractères), troncation à {max_text_length}")
             pdf_text = pdf_text[:max_text_length] + "... [texte tronqué]"
         
-        # Prompt optimisé pour distinguer fournisseur et client
-        # Inspiré de la logique n8n qui a fait ses preuves
-        prompt = f"""Tu es un expert comptable spécialisé dans l'analyse de factures.
-En te basant sur ce texte extrait du PDF : {pdf_text}
+        # Construire la liste des clients connus pour l'injecter dans le prompt
+        known_clients_str = ", ".join(KNOWN_CLIENTS)
 
-Nom du fichier (peut contenir un indice sur le fournisseur) : {filename}
+        prompt = f"""Tu es un expert comptable spécialisé dans l'analyse de factures B2B.
 
-Extrais les informations suivantes et formate-les en JSON strict (sans markdown, juste le code brut).
+Texte extrait du PDF :
+{pdf_text}
 
-IMPORTANT - Distinction fournisseur/client :
-- Le FOURNISSEUR est la société qui a ÉMIS/ENVOYÉ la facture (l'émetteur, le vendeur, celui qui facture)
-- Le CLIENT est la société qui REÇOIT la facture (le destinataire, l'acheteur, celui qui paie)
-- Ne confonds JAMAIS le client avec le fournisseur
+Nom du fichier : {filename}
 
-RÈGLE CRITIQUE :
-- BOARDRIDERS (toutes variantes: BOARDRIDERS TRADING ESPAÑA, BOARDRIDERS TRADING, etc.) est TOUJOURS le CLIENT, JAMAIS le fournisseur
-- Si tu vois BOARDRIDERS, c'est le destinataire de la facture, pas l'émetteur
+---
+MÉTHODE EN 2 ÉTAPES — suis-la dans l'ordre :
 
-Le fournisseur est souvent identifié :
-  * Dans l'en-tête ou le logo de la facture (en haut)
-  * Dans les coordonnées bancaires (RIB, IBAN)
-  * Dans le nom du fichier PDF
-  * Comme "émetteur" ou "vendeur"
-  
-Le client est souvent identifié :
-  * Dans "Adresse de facturation" ou "Adresse d'envoi"
-  * Comme "destinataire" ou "acheteur"
-  
-ASTUCE: Le nom du fichier contient souvent le nom du FOURNISSEUR
+ÉTAPE 1 — Identifie le CLIENT (celui qui REÇOIT et PAIE la facture) :
+  • Il apparaît dans "Adressé à", "Facturé à", "Bill to", "À l'attention de"
+  • Les entités suivantes sont TOUJOURS le client, JAMAIS le fournisseur : {known_clients_str}
+  • Si tu vois l'une de ces entités, c'est le client — point final.
 
-Champs à extraire :
-- fournisseur (Nom de la société ÉMETTRICE de la facture, PAS le client/destinataire. Utilise le nom du fichier comme indice si nécessaire)
-- montant_ht (Montant hors taxes, nombre uniquement)
-- devise (Devise de la facture, ex: EUR, USD, GBP. Cherche le symbole €/$£ ou le code devise explicite)
-- numero_facture (Numéro de la facture)
-- date_facture (Date de la facture au format YYYY-MM-DD)
-- chrono (Le numéro Chrono du document si présent)
-- couverture (La période de couverture/facturation si présente)
-- nom_fichier (nom du fichier : {filename})
+ÉTAPE 2 — Identifie le FOURNISSEUR (celui qui ÉMET et ENVOIE la facture) :
+  • C'est l'autre partie : l'émetteur, le prestataire, le vendeur
+  • Son nom figure souvent en haut de la facture, dans l'en-tête ou le logo
+  • Ses coordonnées bancaires (IBAN/RIB) sont dans la facture
+  • Le nom du fichier contient souvent son nom
+  • Il n'est JAMAIS l'une des entités listées à l'étape 1
 
-Champs requis :
-- fournisseur (String) - ATTENTION: société ÉMETTRICE, pas le client. Vérifie le nom du fichier ! Si tu vois BOARDRIDERS, ce n'est PAS le fournisseur !
-- montant_ht (Number)
-- devise (String - code ISO 4217, ex: EUR)
-- numero_facture (String)
-- date_facture (YYYY-MM-DD)
-- chrono (Number/String)
-- couverture (String - période)
-- nom_fichier (String)
+---
+Extrais les champs suivants et réponds UNIQUEMENT avec le JSON brut (sans markdown) :
 
-Si une info est manquante, mets null.
+{{
+  "fournisseur": "Nom de la société émettrice (étape 2) — jamais le client",
+  "montant_ht": 0.00,
+  "devise": "Code ISO 4217 (EUR, USD, GBP…)",
+  "numero_facture": "Numéro de facture",
+  "date_facture": "YYYY-MM-DD",
+  "chrono": "Numéro chrono si présent, sinon null",
+  "couverture": "Période de couverture si présente, sinon null",
+  "nom_fichier": "{filename}"
+}}
 
-Réponds UNIQUEMENT avec le JSON, sans texte avant ou après."""
+Si une information est absente du document, mets null."""
         
         return prompt
     
@@ -243,16 +253,17 @@ Réponds UNIQUEMENT avec le JSON, sans texte avant ou après."""
             
             s3_client.download_file(bucket, key, local_path)
             logger.info(f"Fichier téléchargé: {local_path}")
-            
-            # 2. Extraire les informations
-            extracted_data = self.extract_from_pdf(local_path, filename)
-            
-            # 3. Stocker dans DynamoDB
-            item_id = self.dynamodb_client.save_invoice_data(extracted_data)
-            
-            # 4. Nettoyer le fichier temporaire
-            if os.path.exists(local_path):
-                os.remove(local_path)
+
+            try:
+                # 2. Extraire les informations
+                extracted_data = self.extract_from_pdf(local_path, filename)
+
+                # 3. Stocker dans DynamoDB
+                item_id = self.dynamodb_client.save_invoice_data(extracted_data)
+            finally:
+                # 4. Nettoyer le fichier temporaire (toujours, même en cas d'erreur)
+                if os.path.exists(local_path):
+                    os.remove(local_path)
             
             return {
                 "statusCode": 200,
@@ -298,7 +309,7 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) != 2:
-        print("Usage: python main_simple.py <chemin_vers_pdf>")
+        print("Usage: python main.py <chemin_vers_pdf>")
         sys.exit(1)
     
     pdf_path = sys.argv[1]

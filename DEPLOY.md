@@ -31,6 +31,8 @@ uv venv .venv
 uv pip install -r requirements.txt
 ```
 
+> ℹ️ Si le `.venv` ne contient pas `pip` (erreur `No module named pip` au déploiement), `deploy.py` l'installe automatiquement via `ensurepip` avant de packager les dépendances Lambda.
+
 ### Fichier .env
 ```powershell
 # Copier le template et renseigner vos valeurs

@@ -7,6 +7,34 @@ versionnage selon [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [3.2.0] - 2026-04-29
+
+### Ajouté
+
+- **Extraction du fournisseur depuis le nom de fichier sans liste fermée** : `_extract_supplier_from_filename()` — fonctionne par élimination (dates, chiffres, clients connus, mots génériques) sans liste de fournisseurs pré-définie. Compatible avec tout nouveau fournisseur automatiquement.
+- **`KNOWN_CLIENTS`** : liste des entités clientes déplacée en constante de module dans `main.py` (plus facile à maintenir et injectée dynamiquement dans le prompt)
+- **`_FILENAME_NOISE_WORDS`** : mots génériques de noms de fichiers centralisés en constante
+- **Champ `devise` dans DynamoDB** : ajouté aux champs extraits et persistés
+
+### Modifié
+
+- **Prompt d'extraction restructuré** : méthode en 2 étapes explicites (1. identifier le client, 2. en déduire le fournisseur) — réduit significativement les confusions client/fournisseur du LLM
+- **`known_suppliers` supprimé** : liste fermée remplacée par extraction générique depuis le nom de fichier
+- **`deploy.py`** : `ensurepip.bootstrap()` ajouté avant les appels pip — résout l'erreur `No module named pip` quand le `.venv` ne contient pas pip ; `sys.executable` utilisé à la place de `python` ; `boto3`/`botocore` retirés du package Lambda (fournis nativement par le runtime AWS)
+- **`datetime.utcnow()`** remplacé par `datetime.now(timezone.utc)` dans `dynamodb_client.py` (déprécié Python 3.12+)
+- **`.gitignore`** : doublons supprimés, chemins absolus `~/.aws/` retirés (non fonctionnels), `.claude/` et `CLAUDE.md` exclus, simplifié de 290 à 70 lignes
+
+### Corrigé
+
+- **Noms de champs DynamoDB** : `'Le numero Chrono du document'`, `'La période de couverture'`, `'nom du fichier que tu trouves ici'` → `chrono`, `couverture`, `nom_fichier` (ces champs n'étaient jamais persistés)
+- **Fuite fichier temporaire** dans `process_s3_event` : `try/finally` garantit la suppression de `/tmp/{fichier}` même en cas d'erreur
+- **Regex JSON greedy** dans `_extract_json_from_response` : `re.search(r'\{.*\}', re.DOTALL)` → parsing brace-balanced (comptage de `{`/`}`) — évitait d'extraire du JSON invalide
+- **`except:` nu** dans `_extract_manual_data` → `except ValueError:`
+- **`devise` absent** du mapping `_normalize_field_names` → le champ LLM était silencieusement perdu
+- **Tests unitaires** : imports cassés (`src.main` → `src_propre/`), mauvaises classes (`InvoiceExtractor` → `InvoiceExtractorSimple`), méthodes inexistantes (`_clean_json_response`) — 16 tests passent désormais
+
+---
+
 ## [3.1.0] - 2026-04-23
 
 ### Ajouté

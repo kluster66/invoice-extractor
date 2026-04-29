@@ -142,10 +142,34 @@ LambdaConfigurations:
 
 ## Ajouter un nouveau champ extrait
 
-1. Modifier le prompt dans `src_propre/main.py` (méthode `_create_prompt`) — ajouter le champ dans les sections "Champs à extraire" et "Champs requis"
-2. Ajouter la colonne dans `COLUMNS` de `ui_invoices.py` et `view_invoices.py`
-3. Redéployer : `python deploy.py`
-4. Retraiter les factures existantes (supprimer depuis l'UI, re-uploader les PDF)
+1. Modifier le prompt dans `src_propre/main.py` (méthode `_create_prompt`) — ajouter le champ dans le JSON exemple du prompt
+2. Ajouter l'alias dans `_normalize_field_names` de `bedrock_client.py`
+3. Ajouter le champ dans la liste `extracted_fields` de `dynamodb_client.py`
+4. Ajouter la colonne dans `COLUMNS` de `ui_invoices.py` et `view_invoices.py`
+5. Redéployer : `python deploy.py`
+6. Retraiter les factures existantes (supprimer depuis l'UI, re-uploader les PDF)
+
+---
+
+## Ajouter un client connu (entité du groupe)
+
+Les entités qui reçoivent les factures (jamais fournisseurs) sont déclarées dans `src_propre/main.py` :
+
+```python
+KNOWN_CLIENTS = [
+    "BOARDRIDERS",
+    "NA PALI",
+    "QUIKSILVER",
+    # Ajouter ici les nouvelles entités du groupe
+]
+```
+
+Cette liste est :
+- Injectée automatiquement dans le prompt Bedrock (le LLM la reçoit à chaque appel)
+- Utilisée par `_fix_supplier_if_needed` pour détecter les confusions client/fournisseur
+- Utilisée par `_extract_supplier_from_filename` pour filtrer les tokens du nom de fichier
+
+Après modification, redéployer avec `python deploy.py`.
 
 ---
 

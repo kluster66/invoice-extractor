@@ -244,17 +244,25 @@ class BedrockClient:
         except json.JSONDecodeError:
             pass
         
-        # Chercher le premier objet JSON dans le texte
-        json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            try:
-                data = json.loads(json_str)
-                if isinstance(data, dict):
-                    logger.info(f"JSON extrait par regex: {len(json_str)} caractères")
-                    return data
-            except json.JSONDecodeError:
-                pass
+        # Chercher le premier objet JSON dans le texte (parsing brace-balanced, non-greedy)
+        start = cleaned.find('{')
+        if start != -1:
+            depth = 0
+            for i, ch in enumerate(cleaned[start:], start):
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        json_str = cleaned[start:i + 1]
+                        try:
+                            data = json.loads(json_str)
+                            if isinstance(data, dict):
+                                logger.info(f"JSON extrait par parsing: {len(json_str)} caractères")
+                                return data
+                        except json.JSONDecodeError:
+                            pass
+                        break
         
         return None
     
@@ -272,6 +280,7 @@ class BedrockClient:
         field_mappings = {
             "fournisseur": ["fournisseur", "supplier", "vendor", "vendeur"],
             "montant_ht": ["montant_ht", "montant", "amount", "total"],
+            "devise": ["devise", "currency", "currency_code", "devise_facture"],
             "numero_facture": ["numero_facture", "numero", "invoice_number", "facture_numero"],
             "date_facture": ["date_facture", "date", "invoice_date"],
             "chrono": ["chrono", "numero_chrono", "chrono_number", "document_chrono"],
@@ -427,7 +436,7 @@ class BedrockClient:
         if amount_match and not extracted_data["montant_ht"]:
             try:
                 extracted_data["montant_ht"] = float(amount_match.group(1).replace(',', '.'))
-            except:
+            except ValueError:
                 pass
         
         return extracted_data

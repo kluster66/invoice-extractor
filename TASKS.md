@@ -1,5 +1,23 @@
 # Tasks - Invoice Extractor
 
+## v3.2.0 — Fiabilité & qualité code (Avril 2026)
+
+- [x] Suppression de `known_suppliers` (liste fermée) → extraction générique du fournisseur depuis le nom de fichier par élimination
+- [x] `KNOWN_CLIENTS` déplacé en constante de module — injecté dynamiquement dans le prompt
+- [x] Prompt restructuré en 2 étapes (identifier client → déduire fournisseur) pour réduire les confusions LLM
+- [x] Correction noms de champs DynamoDB (`chrono`, `couverture`, `nom_fichier`) — données perdues silencieusement
+- [x] Ajout champ `devise` dans les champs persistés DynamoDB et dans `_normalize_field_names`
+- [x] Fuite fichier `/tmp/` corrigée dans `process_s3_event` (`try/finally`)
+- [x] Regex JSON greedy remplacée par parsing brace-balanced
+- [x] `datetime.utcnow()` → `datetime.now(timezone.utc)` (déprécié Python 3.12+)
+- [x] `except:` nu → `except ValueError:`
+- [x] `deploy.py` : `ensurepip.bootstrap()` + `sys.executable` + retrait `boto3`/`botocore` du package Lambda
+- [x] `.gitignore` : nettoyage complets (doublons, chemins absolus, `.claude/` exclu)
+- [x] Tests unitaires : imports et classes corrigés — 16 tests passent
+- [x] Documentation mise à jour (CHANGELOG, CONFIGURATION, CONTRIBUTING, DEPLOY, TASKS)
+
+---
+
 ## v3.0.0 — Interface & Export (Avril 2026)
 
 - [x] Interface graphique NiceGui (`ui_invoices.py`)

@@ -7,7 +7,7 @@ import logging
 import boto3
 import uuid
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
@@ -163,7 +163,7 @@ class DynamoDBClient:
             # Préparer l'item DynamoDB
             item = {
                 'invoice_id': invoice_id,
-                'created_at': datetime.utcnow().isoformat(),
+                'created_at': datetime.now(timezone.utc).isoformat(),
                 'raw_data': json.dumps(invoice_data, ensure_ascii=False)
             }
             
@@ -171,12 +171,12 @@ class DynamoDBClient:
             extracted_fields = [
                 'fournisseur',
                 'montant_ht',
+                'devise',
                 'numero_facture',
                 'date_facture',
-                'Le numero Chrono du document',
-                'La période de couverture',
-                'nom du fichier que tu trouves ici',
-                'filename',
+                'chrono',
+                'couverture',
+                'nom_fichier',
                 'extraction_date',
                 'pdf_path'
             ]
