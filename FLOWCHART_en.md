@@ -56,7 +56,7 @@ flowchart TD
     REFRESH_SUMMARY[refresh_summary\ncount + total HT]
     TABLE_UI[(NiceGUI table\nrows updated)]
 
-    EXPORT_SEL[export_selected\nchecked row(s)]
+    EXPORT_SEL[export_selected\nchecked rows]
     EXPORT_ALL[export_all\nfiltered list]
     BUILD_XLSX[build_xlsx\nopenpyxl]
     XLSX_DL([XLSX download\nbrowser])

@@ -56,7 +56,7 @@ flowchart TD
     REFRESH_SUMMARY[refresh_summary\ncompte + total HT]
     TABLE_UI[(Tableau NiceGUI\nmise à jour rows)]
 
-    EXPORT_SEL[export_selected\nligne(s) cochée(s)]
+    EXPORT_SEL[export_selected\nlignes cochées]
     EXPORT_ALL[export_all\nliste filtrée]
     BUILD_XLSX[build_xlsx\nopenpyxl]
     XLSX_DL([Téléchargement XLSX\nnavigateur])
