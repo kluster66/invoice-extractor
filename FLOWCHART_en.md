@@ -8,7 +8,7 @@ flowchart TD
     UI_START([Browser open\nui_invoices.py])
 
     %% ── Lambda trigger ──────────────────────────────────────────────────────
-    S3_EVENT[S3 Event\nRecords\[0\].s3]
+    S3_EVENT["S3 Event\nRecords[0].s3"]
     LAMBDA[lambda_handler\nreads AWS_REGION]
     PROCESS_S3[process_s3_event\nextracts bucket + key]
     S3_DOWNLOAD[S3 download\n/tmp/file.pdf]
