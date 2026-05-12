@@ -462,7 +462,7 @@ Dictionnaire Python de la facture, ou `None`.
 ### In
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `dynamo_item` | `dict` | Item au format DynamoDB (`{"key": {"S": "val"}, ...}`) |
+| `dynamo_item` | `dict` | Item au format DynamoDB |
 
 ### Transform
 Inverse la conversion : mappe les types DynamoDB (`S`, `N`, `BOOL`, `M`, `SS`, `NS`, `NULL`) vers leurs équivalents Python. Tente de parser `raw_data` en JSON pour produire un champ `parsed_data`.
@@ -739,7 +739,7 @@ Aucune valeur de retour. Effet de bord : rendu de la page web dans le navigateur
 | `depuis` | `str` (optionnel) | Date minimale `YYYY-MM-DD` |
 
 ### Transform
-Scan paginé de DynamoDB, fusion `raw_data` + champs plats (identique à `fetch_records`). Applique les filtres fournisseur et date en mémoire. Trie par date décroissante.
+Scan paginé de DynamoDB, fusion `raw_data` + champs plats. Applique les filtres fournisseur et date en mémoire. Trie par date décroissante.
 
 ### Out
 Liste de dictionnaires Python représentant les factures filtrées.

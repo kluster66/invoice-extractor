@@ -462,7 +462,7 @@ Python dictionary of the invoice, or `None`.
 ### In
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `dynamo_item` | `dict` | Item in DynamoDB format (`{"key": {"S": "val"}, ...}`) |
+| `dynamo_item` | `dict` | Item in DynamoDB format |
 
 ### Transform
 Reverses the conversion: maps DynamoDB types (`S`, `N`, `BOOL`, `M`, `SS`, `NS`, `NULL`) back to native Python types. Attempts to parse `raw_data` as JSON to produce a `parsed_data` field.
@@ -739,7 +739,7 @@ No return value. Side effect: web page rendered in the browser.
 | `depuis` | `str` (optional) | Minimum date `YYYY-MM-DD` |
 
 ### Transform
-Paginated DynamoDB scan with `raw_data` / flat-field merge (same logic as `fetch_records`). Applies supplier and date filters in memory. Sorts by date descending.
+Paginated DynamoDB scan with `raw_data` / flat-field merge. Applies supplier and date filters in memory. Sorts by date descending.
 
 ### Out
 List of filtered Python dictionaries representing invoices.

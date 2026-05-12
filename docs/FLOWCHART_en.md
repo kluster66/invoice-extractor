@@ -17,17 +17,17 @@ flowchart TD
     EXTRACT_PDF[extract_from_pdf\npdf_path + filename]
     PYPDF2[_extract_with_pypdf2\npage by page]
     CLEAN_TEXT[_clean_extracted_text\nnormalization]
-    PDF_TEXT[(Cleaned text\nmax 10,000 chars)]
+    PDF_TEXT[(Cleaned text\nmax 10000 chars)]
 
     %% ── Prompt ──────────────────────────────────────────────────────────────
     CREATE_PROMPT[_create_prompt\nclient vs supplier]
 
     %% ── Bedrock ─────────────────────────────────────────────────────────────
-    DETECT_MODEL[_detect_model_type\nAnthropic / Meta / Amazon…]
+    DETECT_MODEL[_detect_model_type\nAnthropic / Meta / Amazon]
     CREATE_BODY[_create_request_body\nJSON format per provider]
     BEDROCK_API([AWS Bedrock\ninvoke_model])
     PARSE_RESP[_parse_response\nextracts text]
-    EXTRACT_JSON[_extract_json_from_response\nbackticks → direct → brace-balanced]
+    EXTRACT_JSON[_extract_json_from_response\nbackticks direct brace-balanced]
 
     %% ── Post-processing ─────────────────────────────────────────────────────
     JSON_FOUND{Valid JSON\nfound?}
@@ -132,7 +132,7 @@ flowchart TD
     DELETE_RECORDS --> DYNAMO_TABLE
     DELETE_RECORDS --> LOAD_DATA
 
-    %% UI upload → Lambda
+    %% UI upload to Lambda
     MAIN_PAGE --> S3_UPLOAD
 
     %% CLI

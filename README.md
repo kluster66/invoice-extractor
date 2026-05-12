@@ -147,7 +147,12 @@ invoice-extractor/
 ├── requirements.txt                   # Dépendances locales
 ├── requirements-lambda.txt            # Dépendances Lambda
 ├── env.example                        # Template de configuration
-└── .gitignore                         # Fichiers exclus du repo
+├── .gitignore                         # Fichiers exclus du repo
+└── docs/                              # Documentation technique
+    ├── FUNCTIONS.md                   # Référence des fonctions (FR)
+    ├── FLOWCHART.md                   # Diagramme de flux (FR)
+    ├── FUNCTIONS_en.md                # Function reference (EN)
+    └── FLOWCHART_en.md                # Flow diagram (EN)
 ```
 
 ## Ressources créées par CloudFormation
@@ -178,6 +183,15 @@ python cleanup.py
 # ou
 aws cloudformation delete-stack --stack-name invoice-extractor --region us-west-2
 ```
+
+## Documentation technique
+
+| Fichier | Contenu |
+|---------|---------|
+| [`docs/FUNCTIONS.md`](docs/FUNCTIONS.md) | Référence complète des 51 fonctions (FR) |
+| [`docs/FLOWCHART.md`](docs/FLOWCHART.md) | Diagramme de flux Mermaid (FR) |
+| [`docs/FUNCTIONS_en.md`](docs/FUNCTIONS_en.md) | Function reference (EN) |
+| [`docs/FLOWCHART_en.md`](docs/FLOWCHART_en.md) | Flow diagram (EN) |
 
 ---
 

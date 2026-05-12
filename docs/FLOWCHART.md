@@ -23,11 +23,11 @@ flowchart TD
     CREATE_PROMPT[_create_prompt\nclient vs fournisseur]
 
     %% ── Bedrock ─────────────────────────────────────────────────────────────
-    DETECT_MODEL[_detect_model_type\nAnthropid / Meta / Amazon…]
+    DETECT_MODEL[_detect_model_type\nAnthropic / Meta / Amazon]
     CREATE_BODY[_create_request_body\nformat JSON par fournisseur]
     BEDROCK_API([AWS Bedrock\ninvoke_model])
     PARSE_RESP[_parse_response\nextrait le texte]
-    EXTRACT_JSON[_extract_json_from_response\nbackticks → direct → brace-balanced]
+    EXTRACT_JSON[_extract_json_from_response\nbackticks direct brace-balanced]
 
     %% ── Post-traitement ─────────────────────────────────────────────────────
     JSON_FOUND{JSON valide\ntrouvé ?}
@@ -46,7 +46,7 @@ flowchart TD
 
     %% ── Réponse Lambda ───────────────────────────────────────────────────────
     LAMBDA_OK([Réponse 200\ninvoice_id + data])
-    LAMBDA_ERR([Réponse 500\nmessage d'erreur])
+    LAMBDA_ERR([Réponse 500\nmessage erreur])
 
     %% ── Interface NiceGUI ────────────────────────────────────────────────────
     MAIN_PAGE[main_page\nconstruit l'interface]
@@ -132,7 +132,7 @@ flowchart TD
     DELETE_RECORDS --> DYNAMO_TABLE
     DELETE_RECORDS --> LOAD_DATA
 
-    %% Upload UI → Lambda
+    %% Upload UI vers Lambda
     MAIN_PAGE --> S3_UPLOAD
 
     %% CLI
